@@ -615,12 +615,13 @@ class HMIApp(ctk.CTk):
                                 # Başarı genelde 0.2s sürüyor. 0.4s timeout yeterli.
                                 # Hata olursa hızlıca retry'a düşsün (0.7s bekletmesin).
                                 old_timeout = self.instrument.serial.timeout
-                                self.instrument.serial.timeout = 0.4
+                                self.instrument.serial.timeout = 0.6
                                 
                                 start_time = time.time() # METRICS: Start timer here
                                 try:
                                     # Öncesinde sessizlik (Bus stabilization)
-                                    time.sleep(0.05)
+                                    # Polling'den hemen sonra geliyorsa cihazın toparlaması için biraz daha süre ver
+                                    time.sleep(0.1)
                                     
                                     # Function code 6 (Write Single Register)
                                     print(f"DEBUG: Cmd {sid} -> Reg:{reg} Val:{val} (Try {attempt+1})")
@@ -748,8 +749,11 @@ class HMIApp(ctk.CTk):
         
         if not success:
             self.data_store[sid]['errors'] += 1
-            if self.data_store[sid]['errors'] >= 1:
-                self.data_store[sid]['online'] = False
+            
+        # Polling bitti, biraz bekle ki sonraki komut veya sorgu için hat rahatlasın
+        time.sleep(0.05)
+        if self.data_store[sid]['errors'] >= 1:
+            self.data_store[sid]['online'] = False
 
     # ========================================================================
     #  DETAY POPUP
