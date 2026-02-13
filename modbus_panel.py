@@ -6,6 +6,7 @@ import threading
 import time
 import json
 import os
+import queue
 
 # --- ARAYÜZ AYARLARI ---
 ctk.set_appearance_mode("Dark")
@@ -13,49 +14,35 @@ ctk.set_default_color_theme("blue")
 
 # --- LIQUID GLASS RENK PALETİ ---
 COLORS = {
-    # Derinlik Katmanları (Arka plandan öne doğru)
-    'bg_dark':       "#06070D",   # En derin katman — neredeyse siyah
-    'bg_mid':        "#0D0F1A",   # Orta katman
-    'bg_card':       "#141825",   # Kart yüzeyi — cam gibi koyu
-    'bg_card_hover': "#1C2033",   # Kart hover
-    'bg_card_open':  "#102A20",   # Açık durumu (Yeşilimsi tint)
-    'bg_card_closed':"#2A1515",   # Kapalı durumu (Kırmızımsı tint)
-
-    # Cam Kenarları ve Yüzeyler
-    'glass_border':  "#2A3350",   # Cam kenar hissiyatı
-    'glass_glow':    "#4A6CF7",   # Seçili kenar: mavi ışıltı
-    'glass_surface': "#181D2E",   # İç yüzey
-    'glass_input':   "#111526",   # Input arka planı
-
-    # Toolbar
-    'toolbar_bg':    "#0A0C14",   # Toolbar — en koyu yüzey
-    'toolbar_border':"#1E2340",   # Toolbar alt çizgi
-
-    # Vurgu Renkleri
-    'accent':        "#5B8DEF",   # Ana mavi — yumuşak, parlak
-    'accent_dark':   "#3D6FD9",   # Mavi hover
-    'accent_glow':   "#7AABFF",   # Mavi ışıltı
-
-    # Durum Renkleri (Yumuşak, cam üzerinde parlayan)
-    'green':         "#34D399",   # Yeşil — mint tonu
-    'green_dark':    "#059669",   # Yeşil koyu
-    'red':           "#F87171",   # Kırmızı — yumuşak mercan
-    'red_dark':      "#DC2626",   # Kırmızı koyu
-    'yellow':        "#FBBF24",   # Sarı — sıcak amber
-    'orange':        "#FB923C",   # Turuncu
-
-    # Yazı
-    'text':          "#E8ECF4",   # Ana metin — soğuk beyaz
-    'text_dim':      "#6B7A99",   # Soluk metin
-    'text_label':    "#8B9BC0",   # Etiket metni
-    'text_label':    "#8B9BC0",   # Etiket metni
+    'bg_dark':       "#06070D",
+    'bg_mid':        "#0D0F1A",
+    'bg_card':       "#141825",
+    'bg_card_hover': "#1C2033",
+    'bg_card_open':  "#102A20",
+    'bg_card_closed':"#2A1515",
+    'glass_border':  "#2A3350",
+    'glass_glow':    "#4A6CF7",
+    'glass_surface': "#181D2E",
+    'glass_input':   "#111526",
+    'toolbar_bg':    "#0A0C14",
+    'toolbar_border':"#1E2340",
+    'accent':        "#5B8DEF",
+    'accent_dark':   "#3D6FD9",
+    'accent_glow':   "#7AABFF",
+    'green':         "#34D399",
+    'green_dark':    "#059669",
+    'red':           "#F87171",
+    'red_dark':      "#DC2626",
+    'yellow':        "#FBBF24",
+    'orange':        "#FB923C",
+    'text':          "#E8ECF4",
+    'text_dim':      "#6B7A99",
+    'text_label':    "#8B9BC0",
     'transparent':   "transparent",
-    'dim_icon':      "#333842",   # Sönük ikon rengi
-    'btn_dim':       "#222633",   # Sönük buton rengi
-    
-    # Genel
-    'border':        "#2A3350",   # Varsayılan kenar
-    'surface':       "#181D2E",   # Genel yüzey
+    'dim_icon':      "#333842",
+    'btn_dim':       "#222633",
+    'border':        "#2A3350",
+    'surface':       "#181D2E",
 }
 
 class CTkToolTip(ctk.CTkToplevel):
@@ -98,7 +85,6 @@ REG_SAMPLE_VAL  = 9   # RW
 REGS_PER_DEVICE = 10
 
 STATUS_TEXT  = {0: "⏸ Duruyor", 1: "● Açık", 2: "● Kapalı"}
-STATUS_COLOR = {0: COLORS['text_dim'], 1: COLORS['green'], 2: COLORS['red']}
 
 # Bitwise Hata/Uyarı Tanımları
 ERR_CODES = {
@@ -144,22 +130,25 @@ class HMIApp(ctk.CTk):
 
         # --- Veri Modeli ---
         self.devices = []           # [{'id':int, 'name':str}, ...]
-        self.data_store = {}        # {slave_id: {'cache':{reg:val}, 'pending':{reg:val}, 'online':bool, 'errors':int, ...}}
+        self.data_store = {}        # Veri saklama (Cache, Metrics)
         self.instrument = None
         self.polling = False
         self.poll_lock = threading.Lock()
         self.connected = False
         
+        # Priority Queue
+        self.command_queue = queue.Queue()
+
         # UI Referansları
-        self.device_cards_ui = {}   # {slave_id: {'frame': ..., 'badge': ..., 'badge_lbl': ..., 'warn_icon': ...}}
+        self.device_cards_ui = {}
         self.grid_frame = None
         self.selected_device_id = None
-        self.detail_open_for = None  # Detay popup açık olan cihazın ID'si
+        self.detail_open_for = None 
 
-        self._load_config()  # Kayıtlı cihazları yükle
+        self._load_config()
         self._build_toolbar()
         self._build_grid_area()
-        self._sync_grid_layout()  # Yüklenen cihazları ekrana bas
+        self._sync_grid_layout()
 
     def _load_config(self):
         try:
@@ -173,7 +162,8 @@ class HMIApp(ctk.CTk):
                     self.data_store[sid] = {
                         'cache': {}, 'pending': {}, 'online': True, 'errors': 0, 'last_update': '',
                         'latency': 0, 'success_count': 0, 'total_count': 0,
-                        'cmd_latency': 0, 'last_cmd_ts': 0
+                        'cmd_latency': 0, 'last_cmd_ts': 0,
+                        'slave_resp_time': 0, 'loop_time': 0, 'last_poll_ts': 0
                     }
         except Exception as e:
             print(f"Config Yükleme Hatası: {e}")
@@ -189,7 +179,6 @@ class HMIApp(ctk.CTk):
     #  TOOLBAR
     # ========================================================================
     def _build_toolbar(self):
-        # Toolbar — Liquid Glass üst çubuk
         toolbar = ctk.CTkFrame(self, height=60, corner_radius=0, fg_color=COLORS['toolbar_bg'],
                                border_width=1, border_color=COLORS['toolbar_border'])
         toolbar.pack(fill="x", side="top")
@@ -198,15 +187,12 @@ class HMIApp(ctk.CTk):
         inner = ctk.CTkFrame(toolbar, fg_color="transparent")
         inner.pack(fill="x", padx=20, pady=10)
 
-        # Logo / Başlık
         ctk.CTkLabel(inner, text="◆", font=("Segoe UI", 18), text_color=COLORS['accent']).pack(side="left", padx=(0, 6))
         ctk.CTkLabel(inner, text="HMI", font=("Segoe UI", 14, "bold"), text_color=COLORS['text']).pack(side="left", padx=(0, 16))
 
-        # Ayraç
         sep = ctk.CTkFrame(inner, width=1, height=28, fg_color=COLORS['glass_border'])
         sep.pack(side="left", padx=(0, 16))
 
-        # Port
         ctk.CTkLabel(inner, text="PORT", font=("Segoe UI", 9, "bold"), text_color=COLORS['text_dim']).pack(side="left", padx=(0, 4))
         ports = [p.device for p in serial.tools.list_ports.comports()] or ["Port Yok"]
         self.combo_port = ctk.CTkComboBox(inner, values=ports, width=115, height=30,
@@ -216,7 +202,6 @@ class HMIApp(ctk.CTk):
                                           dropdown_fg_color=COLORS['bg_card'])
         self.combo_port.pack(side="left", padx=(0, 10))
 
-        # Baudrate
         ctk.CTkLabel(inner, text="BAUD", font=("Segoe UI", 9, "bold"), text_color=COLORS['text_dim']).pack(side="left", padx=(0, 4))
         self.combo_baud = ctk.CTkComboBox(inner, values=["9600","19200","38400","57600","115200","230400","250000"],
                                           width=90, height=30,
@@ -227,11 +212,9 @@ class HMIApp(ctk.CTk):
         self.combo_baud.set("9600")
         self.combo_baud.pack(side="left", padx=(0, 16))
 
-        # Ayraç
         sep2 = ctk.CTkFrame(inner, width=1, height=28, fg_color=COLORS['glass_border'])
         sep2.pack(side="left", padx=(0, 16))
 
-        # Butonlar — Glass pill style
         self.btn_add = ctk.CTkButton(inner, text="＋  Ekle", width=90, height=30,
                                      font=("Segoe UI", 11, "bold"), corner_radius=15,
                                      fg_color=COLORS['accent'], hover_color=COLORS['accent_dark'],
@@ -250,7 +233,6 @@ class HMIApp(ctk.CTk):
                                          command=self._toggle_connection)
         self.btn_connect.pack(side="left", padx=(8, 0))
 
-        # Status — sağ taraf
         self.lbl_toolbar_status = ctk.CTkLabel(inner, text="● Bağlı değil",
                                                font=("Segoe UI", 11), text_color=COLORS['text_dim'])
         self.lbl_toolbar_status.pack(side="right", padx=8)
@@ -274,29 +256,24 @@ class HMIApp(ctk.CTk):
         self.lbl_empty.pack(pady=100)
 
     def _sync_grid_layout(self):
-        """Cihaz listesine göre grid layout'unu senkronize et (Ekleme/Silme durumunda)."""
         existing_ids = list(self.device_cards_ui.keys())
         target_ids = [d['id'] for d in self.devices]
 
-        # Silinecekler
         for sid in existing_ids:
             if sid not in target_ids:
                 self.device_cards_ui[sid]['frame'].destroy()
                 del self.device_cards_ui[sid]
 
-        # Eklenecekler
         for sid in target_ids:
             if sid not in self.device_cards_ui:
                 device = next(d for d in self.devices if d['id'] == sid)
                 self._create_device_card(sid, device['name'])
 
-        # Boş mesajı kontrolü
         if not self.devices:
             self.lbl_empty.pack(pady=80)
         else:
             self.lbl_empty.pack_forget()
 
-        # Grid yerleşimi
         cols = max(1, min(6, len(self.devices)))
         for i, (sid, ui) in enumerate(self.device_cards_ui.items()):
             r, c = divmod(i, cols)
@@ -304,7 +281,6 @@ class HMIApp(ctk.CTk):
             self.grid_frame.columnconfigure(c, weight=1)
 
     def _create_device_card(self, sid, name):
-        """Liquid Glass cihaz kartı — cam yüzey efekti."""
         card = ctk.CTkFrame(self.grid_frame, fg_color=COLORS['bg_card'],
                             corner_radius=16, border_width=1,
                             border_color=COLORS['glass_border'],
@@ -314,8 +290,7 @@ class HMIApp(ctk.CTk):
         content = ctk.CTkFrame(card, fg_color="transparent")
         content.pack(fill="both", expand=True, padx=16, pady=14)
 
-        # ── Başlık ──
-        # İsim Girişi
+        # Başlık ve İsim
         name_entry = ctk.CTkEntry(content, font=("Segoe UI", 14, "bold"), height=34,
                                   fg_color=COLORS['glass_input'],
                                   border_color=COLORS['glass_border'],
@@ -326,35 +301,28 @@ class HMIApp(ctk.CTk):
         name_entry.bind("<FocusOut>", lambda e, s=sid, ent=name_entry: self._update_device_name(s, ent.get()))
         name_entry.bind("<Return>", lambda e, s=sid, ent=name_entry: (self._update_device_name(s, ent.get()), self.focus()))
 
-        # ── Status LED (Sağ Üst Köşe) - ARTIK KULLANILMIYOR (Görünmez yapabiliriz veya kaldırabiliriz) ──
-        # Kullanıcı arkaplan rengini istiyor, ama kod hatası olmasın diye widget'ı tutuyoruz, siliyoruz.
-        status_led = ctk.CTkLabel(content, text="", font=("Arial", 1), width=0, height=0) 
-        # Pack etmiyoruz, görünmez.
+        # LED (Gizli)
+        status_led = ctk.CTkLabel(content, text="", font=("Arial", 1), width=0, height=0)
         
-        # ── İkon Alanı (Hata/Uyarı Üçgenleri) ──
+        # İkon Alanı
         icon_frame = ctk.CTkFrame(content, fg_color="transparent", height=40)
         icon_frame.pack(pady=5)
         
-        # Hata İkonu (Sol)
-        icon_err = ctk.CTkLabel(icon_frame, text="▲", font=("Arial", 24), text_color=COLORS['bg_card']) # Başlangıçta Görünmez
-        # icon_err.pack(side="left", padx=10) # Başlangıçta pack etme
+        icon_err = ctk.CTkLabel(icon_frame, text="▲", font=("Arial", 24), text_color=COLORS['bg_card'])
         tooltip_err = CTkToolTip(icon_err, "Hata Yok")
 
-        # Uyarı İkonu (Sağ)
-        icon_warn = ctk.CTkLabel(icon_frame, text="▲", font=("Arial", 24), text_color=COLORS['bg_card']) # Başlangıçta Görünmez
-        # icon_warn.pack(side="right", padx=10) # Başlangıçta pack etme
+        icon_warn = ctk.CTkLabel(icon_frame, text="▲", font=("Arial", 24), text_color=COLORS['bg_card'])
         tooltip_warn = CTkToolTip(icon_warn, "Uyarı Yok")
         
-        # ── Durum Yazısı (AÇIK/KAPALI) ──
+        # Durum Yazısı
         lbl_status = ctk.CTkLabel(content, text="Bekleniyor...", 
                                   font=("Segoe UI", 16, "bold"),
                                   text_color=COLORS['text_dim'])
         lbl_status.pack(pady=(5, 5))
 
-        # ── Kontrol Butonları (Glass pill) ──
+        # Butonlar
         btn_frame = ctk.CTkFrame(content, fg_color="transparent")
         btn_frame.pack(fill="x", pady=(6, 6))
-        # Grid düzeni ile %50 - %50 paylaşım
         btn_frame.columnconfigure(0, weight=1)
         btn_frame.columnconfigure(1, weight=1)
 
@@ -374,7 +342,7 @@ class HMIApp(ctk.CTk):
                       )
         btn_off.grid(row=0, column=1, padx=(3, 0), sticky="ew")
 
-        # ── Detay Butonu (Glass surface) ──
+        # Detaylar Button
         ctk.CTkButton(content, text="⚙  Ayarlar",
                       font=("Segoe UI", 10), height=28,
                       fg_color=COLORS['glass_surface'],
@@ -384,23 +352,18 @@ class HMIApp(ctk.CTk):
                       command=lambda s=sid: self._open_detail_popup(s)
                       ).pack(fill="x", pady=(2, 0))
 
-        # Tıklama ile Seçim
         card.bind("<Button-1>", lambda e, s=sid: self._select_device(s))
 
         self.device_cards_ui[sid] = {
-            'frame': card,
-            'icon_err': icon_err, 'tooltip_err': tooltip_err,
+            'frame': card, 'icon_err': icon_err, 'tooltip_err': tooltip_err,
             'icon_warn': icon_warn, 'tooltip_warn': tooltip_warn,
-            'name_entry': name_entry,
-            'led': status_led,
-            'btn_on': btn_on,
-            'btn_off': btn_off,
-            'lbl_status': lbl_status
+            'name_entry': name_entry, 'led': status_led,
+            'btn_on': btn_on, 'btn_off': btn_off, 'lbl_status': lbl_status
         }
         
-        # Hitbox Fix: Kart içindeki tüm widget'lara tıklama eventi ekle
+        # Hitbox Fix
         def bind_recursive(w, s):
-            if isinstance(w, ctk.CTkButton): return # Butonların fonksiyonunu bozma
+            if isinstance(w, ctk.CTkButton): return
             try:
                 w.bind("<Button-1>", lambda e, sid=s: self._select_device(sid))
             except: pass
@@ -410,7 +373,6 @@ class HMIApp(ctk.CTk):
         bind_recursive(card, sid)
 
     def _update_ui_data(self):
-        """Mevcut kartların verilerini KIRPIŞMADAN güncelle (Sadece Label configure eder)."""
         with self.poll_lock:
             for sid, ui in self.device_cards_ui.items():
                 if sid not in self.data_store: continue
@@ -421,102 +383,72 @@ class HMIApp(ctk.CTk):
                     cache = data['cache']
                     status = cache.get(REG_STATUS, 0)
                     
-                    # Highlight selection (Seçili kart: mavi ışıltı kenar)
                     border = COLORS['glass_glow'] if sid == self.selected_device_id else COLORS['glass_border']
                     if ui['frame'].cget("border_color") != border:
                         ui['frame'].configure(border_color=border)
                     
-                    
-                    
-                    # Durum Yazısı Güncelleme - Nötr Renk
                     status_text = STATUS_TEXT.get(status, "Bilinmiyor")
                     ui['lbl_status'].configure(text=status_text, text_color=COLORS['text'])
                     
-                    # Bağlantı Durumu Arka Planı (Online/Offline)
                     if not online:
-                        # Offline -> Kırmızımsı Arka Plan
                         if ui['frame'].cget("fg_color") != COLORS['bg_card_closed']:
                             ui['frame'].configure(fg_color=COLORS['bg_card_closed'])
                     else:
-                        # Online -> Normal Arka Plan
                         if ui['frame'].cget("fg_color") != COLORS['bg_card']:
                             ui['frame'].configure(fg_color=COLORS['bg_card'])
 
-                    # Butonların rengini sabitle (Artık aktif renk yok, sadece basınca çalışır)
                     ui['btn_on'].configure(fg_color=COLORS['green_dark'])
                     ui['btn_off'].configure(fg_color=COLORS['red_dark'])
 
-                    # Watchdog: Veri bayatladıysa (15 sn) offline varsay
-                    last_ts = self.data_store[sid].get('timestamp', 0)
+                    last_ts = data.get('timestamp', 0)
                     if time.time() - last_ts > 15.0 and self.polling:
                         online = False
                         is_stale = True
                     else:
                         is_stale = False
 
-                    # Connection LED Durumu
-                    if not online: 
-                        led_color = COLORS['red']
-                    elif is_stale:
-                        led_color = COLORS['yellow']
-                    else:
-                        led_color = COLORS['green']
+                    if not online: led_color = COLORS['red']
+                    elif is_stale: led_color = COLORS['yellow']
+                    else: led_color = COLORS['green']
                     
                     if ui['led'].cget("text_color") != led_color:
                         ui['led'].configure(text_color=led_color)
 
-                    # Hata ve Uyarı Kontrolü (Reg 2 ve 3)
                     err_val = cache.get(REG_ERRORS, 0)
                     warn_val = cache.get(REG_WARNINGS, 0)
                     
-                    # Bitwise Hata Çözümleme
                     active_errors = []
                     if err_val > 0:
                         for bit, msg in ERR_CODES.items():
                             if (err_val >> bit) & 1:
                                 active_errors.append(f"• {msg}")
-                        if not active_errors: # Tanımsız bitler varsa
-                            active_errors.append(f"• Kod: {err_val}")
+                        if not active_errors: active_errors.append(f"• Kod: {err_val}")
 
-                    # Bitwise Uyarı Çözümleme
                     active_warnings = []
                     if warn_val > 0:
                         for bit, msg in WARN_CODES.items():
                             if (warn_val >> bit) & 1:
                                 active_warnings.append(f"• {msg}")
-                        if not active_warnings:
-                            active_warnings.append(f"• Kod: {warn_val}")
+                        if not active_warnings: active_warnings.append(f"• Kod: {warn_val}")
                     
-                    # İkon Durumları (Hata/Uyarı yoksa görünmez olsun - pack_forget)
-                    # Kırmızı Üçgen (Hata)
                     if active_errors:
-                        # Hata Var -> Görünür Kırmızı
-                        if not ui['icon_err'].winfo_ismapped():
-                            ui['icon_err'].pack(side="left", padx=10)
+                        if not ui['icon_err'].winfo_ismapped(): ui['icon_err'].pack(side="left", padx=10)
                         ui['icon_err'].configure(text_color=COLORS['red']) 
                         ui['tooltip_err'].label.configure(text="\n".join(active_errors))
                     else:
-                        # Hata Yok -> Görünmez (pack_forget)
                         ui['icon_err'].pack_forget()
-                        # Tooltip'i boşalt
                         ui['tooltip_err'].label.configure(text="")
 
-                    # Sarı Üçgen (Uyarı)
                     if online and active_warnings:
-                        # Uyarı Var -> Görünür Sarı
-                        if not ui['icon_warn'].winfo_ismapped():
-                            ui['icon_warn'].pack(side="right", padx=10)
+                        if not ui['icon_warn'].winfo_ismapped(): ui['icon_warn'].pack(side="right", padx=10)
                         ui['icon_warn'].configure(text_color=COLORS['yellow']) 
                         ui['tooltip_warn'].label.configure(text="\n".join(active_warnings))
                     elif online and is_stale:
-                        if not ui['icon_warn'].winfo_ismapped():
-                            ui['icon_warn'].pack(side="right", padx=10)
+                        if not ui['icon_warn'].winfo_ismapped(): ui['icon_warn'].pack(side="right", padx=10)
                         ui['icon_warn'].configure(text_color=COLORS['yellow'])
                         ui['tooltip_warn'].label.configure(text="VERİ GECİKMESİ")
                     else:
-                        # Uyarı Yok -> Görünmez
                         ui['icon_warn'].pack_forget()
-                        # Tooltip'i boşalt
                         ui['tooltip_warn'].label.configure(text="")
                     
                 except Exception as e:
@@ -533,22 +465,14 @@ class HMIApp(ctk.CTk):
         dialog.transient(self)
         dialog.grab_set()
 
-        ctk.CTkLabel(dialog, text="Yeni Cihaz Ekle", font=("Segoe UI", 16, "bold"),
-                     text_color=COLORS['text']).pack(pady=(24, 16))
-
-        ctk.CTkLabel(dialog, text="SLAVE ID", font=("Segoe UI", 9, "bold"),
-                     text_color=COLORS['text_dim']).pack()
-        ent_id = ctk.CTkEntry(dialog, width=120, height=34, corner_radius=10,
-                              fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'],
-                              font=("Consolas", 13), justify="center")
+        ctk.CTkLabel(dialog, text="Yeni Cihaz Ekle", font=("Segoe UI", 16, "bold"), text_color=COLORS['text']).pack(pady=(24, 16))
+        ctk.CTkLabel(dialog, text="SLAVE ID", font=("Segoe UI", 9, "bold"), text_color=COLORS['text_dim']).pack()
+        ent_id = ctk.CTkEntry(dialog, width=120, height=34, corner_radius=10, fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'], font=("Consolas", 13), justify="center")
         ent_id.pack(pady=(4, 10))
         ent_id.insert(0, "1")
 
-        ctk.CTkLabel(dialog, text="CİHAZ ADI", font=("Segoe UI", 9, "bold"),
-                     text_color=COLORS['text_dim']).pack()
-        ent_name = ctk.CTkEntry(dialog, width=220, height=34, corner_radius=10,
-                                fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'],
-                                font=("Segoe UI", 12), justify="center")
+        ctk.CTkLabel(dialog, text="CİHAZ ADI", font=("Segoe UI", 9, "bold"), text_color=COLORS['text_dim']).pack()
+        ent_name = ctk.CTkEntry(dialog, width=220, height=34, corner_radius=10, fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'], font=("Segoe UI", 12), justify="center")
         ent_name.pack(pady=(4, 16))
         ent_name.insert(0, "Yeni Cihaz")
 
@@ -561,10 +485,8 @@ class HMIApp(ctk.CTk):
                 if not sid_str:
                     lbl_err.configure(text="ID boş olamaz!")
                     return
-                
-                try:
-                    sid = int(sid_str)
-                except ValueError:
+                try: sid = int(sid_str)
+                except ValueError: 
                     lbl_err.configure(text="ID sayı olmalı!")
                     return
 
@@ -581,24 +503,20 @@ class HMIApp(ctk.CTk):
                 self.data_store[sid] = {
                     'cache': {}, 'pending': {}, 'online': True, 'errors': 0, 'last_update': '',
                     'latency': 0, 'success_count': 0, 'total_count': 0,
-                    'cmd_latency': 0, 'last_cmd_ts': 0
+                    'cmd_latency': 0, 'last_cmd_ts': 0,
+                    'slave_resp_time': 0, 'loop_time': 0, 'last_poll_ts': 0
                 }
                 
-                try:
-                    self._save_config()
-                except Exception as e:
-                    lbl_err.configure(text=f"Kayıt Hatası: {e}")
-                    # Kayıt hatası olsa bile eklemeye devam et (runtime)
+                try: self._save_config()
+                except Exception as e: lbl_err.configure(text=f"Kayıt Hatası: {e}")
                 
                 self._sync_grid_layout()
                 dialog.destroy()
             except Exception as e:
                 lbl_err.configure(text=f"Beklenmeyen Hata: {e}")
-                print(f"Ekleme Hatası: {e}")
 
         ctk.CTkButton(dialog, text="EKLE", height=36, corner_radius=12,
-                      font=("Segoe UI", 12, "bold"),
-                      fg_color=COLORS['accent'], hover_color=COLORS['accent_dark'],
+                      font=("Segoe UI", 12, "bold"), fg_color=COLORS['accent'], hover_color=COLORS['accent_dark'],
                       command=add).pack(pady=6, padx=60, fill="x")
 
     def _delete_selected_device(self):
@@ -614,27 +532,24 @@ class HMIApp(ctk.CTk):
         self._update_ui_data()
 
     def _send_command(self, sid, val):
-        """Komut kuyruğa ekle — polling thread sonraki turda gönderir."""
+        """Komut kuyruğa ekle — polling thread anında işler (Öncelikli)."""
         if sid not in self.data_store: return
-        self.data_store[sid]['pending'][REG_COMMAND] = val
-        self.data_store[sid]['last_cmd_ts'] = time.time() # Komut başlangıç zamanı
+        self.command_queue.put((sid, REG_COMMAND, val, time.time()))
 
     def _update_device_name(self, sid, name):
         for d in self.devices:
             if d['id'] == sid: d['name'] = name; break
 
     # ========================================================================
-    #  MODBUS MOTORU  (ORİJİNAL ÇALIŞAN PATTERN)
+    #  MODBUS POLL MOTOR
     # ========================================================================
     def _toggle_connection(self):
         if self.connected:
             self.polling = False
             self.connected = False
             if self.instrument and self.instrument.serial:
-                try:
-                    self.instrument.serial.close()
-                except:
-                    pass
+                try: self.instrument.serial.close()
+                except: pass
             self.instrument = None
             self.btn_connect.configure(text="⚡ Bağlan", fg_color=COLORS['green_dark'])
             self.lbl_toolbar_status.configure(text="● Bağlı değil", text_color=COLORS['text_dim'])
@@ -648,13 +563,12 @@ class HMIApp(ctk.CTk):
 
                 self.instrument = minimalmodbus.Instrument(port, 1)  # dummy sid
                 self.instrument.serial.baudrate = baud
-                self.instrument.serial.timeout  = 1.0
-                self.instrument.close_port_after_each_call = False  # Port açık kalsın
+                self.instrument.serial.timeout  = 0.5
+                self.instrument.close_port_after_each_call = False
 
                 self.connected = True
                 self.polling = True
 
-                # Hata sayaçlarını sıfırla
                 for sid in self.data_store:
                     self.data_store[sid]['online'] = True
                     self.data_store[sid]['errors'] = 0
@@ -666,95 +580,131 @@ class HMIApp(ctk.CTk):
                 self.lbl_toolbar_status.configure(text=f"✕ Hata: {e}", text_color=COLORS['red'])
 
     def _polling_worker(self):
-        """Polling döngüsü: optimize edilmiş, latency ölçümlü."""
+        """Polling döngüsü: Öncelikli komut kuyruğu ve periyodik sorgu."""
+        device_index = 0
+        
         while self.polling:
-            for device in self.devices:
-                if not self.polling:
-                    break
+            # 1. ÖNCELİK: Komut Kuyruğu
+            had_command = False
+            processed_cmds = 0
+            
+            while not self.command_queue.empty() and processed_cmds < 5: # Max 5 komut üst üste
+                try:
+                    cmd = self.command_queue.get_nowait()
+                    sid, reg, val, ts = cmd
+                    had_command = True
+                    processed_cmds += 1
+                    
+                    with self.poll_lock:
+                        start_time = time.time()
+                        try:
+                            # Buffer Temizliği (Çakışmayı önler)
+                            self.instrument.serial.reset_input_buffer()
+                            self.instrument.serial.reset_output_buffer()
+                            time.sleep(0.02) # Kısa bekleme
 
-                sid = device['id']
-                if sid not in self.data_store: continue # Safety check
-
-                try: # Thread Crash Protection
-                    success = False
-
-                    # İstatistik başlat
-                    self.data_store[sid]['total_count'] = self.data_store[sid].get('total_count', 0) + 1
-
-                    for attempt in range(3):  # 3 kez arka arkaya dene (Burst Retries)
-                        with self.poll_lock:
-                            try:
-                                start_time = time.time()  # Latency başlangıç
-
-                                # Buffer temizle
-                                self.instrument.serial.reset_input_buffer()
-                                self.instrument.serial.reset_output_buffer()
-                                time.sleep(0.05) 
-
-                                self.instrument.address = sid
-
-                                # 1. Bekleyen yazmaları gönder
-                                pending = self.data_store[sid]['pending']
-                                if pending:
-                                    for reg, val in sorted(pending.items()):
-                                        self.instrument.write_register(reg, val, functioncode=6)
-                                    self.data_store[sid]['pending'] = {}
-
-                                # 2. Register oku (Register 0 WO olduğu için 1'den başla)
-                                # Detay açıkken Reg 1-9 arası (9 adet), değilse Reg 1-3 arası (Status, Err, Warn)
-                                start_reg = 1
-                                if self.detail_open_for == sid:
-                                    read_count = 9 # Reg 1..9
-                                else:
-                                    read_count = 3 # Reg 1..3 (Status, Error, Warning)
-                                
-                                values = self.instrument.read_registers(start_reg, read_count, functioncode=3)
-
-                                # Latency hesapla
-                                end_time = time.time()
-                                latency_ms = (end_time - start_time) * 1000
-                                self.data_store[sid]['latency'] = int(latency_ms)
-
-                                # Komut Latency (Eğer beklenen bir komut varsa)
-                                if self.data_store[sid].get('last_cmd_ts', 0) > 0:
-                                    cmd_dur = (end_time - self.data_store[sid]['last_cmd_ts']) * 1000
-                                    self.data_store[sid]['cmd_latency'] = int(cmd_dur)
-                                    self.data_store[sid]['last_cmd_ts'] = 0 # Sıfırla
-
-                                # 3. Cache güncelle (Reg 0'ı atla, okunanları 1'den itibaren yerleştir)
-                                for i, v in enumerate(values):
-                                    self.data_store[sid]['cache'][start_reg + i] = v
-
+                            self.instrument.address = sid
+                            # Function code 6 (Write Single Register)
+                            self.instrument.write_register(reg, val, 0, functioncode=6)
+                            
+                            # Metrics Update
+                            end_time = time.time()
+                            resp_time = (end_time - start_time) * 1000
+                            
+                            if sid in self.data_store:
+                                self.data_store[sid]['slave_resp_time'] = resp_time
+                                if ts > 0:
+                                    self.data_store[sid]['cmd_latency'] = (end_time - ts) * 1000
                                 self.data_store[sid]['online'] = True
                                 self.data_store[sid]['errors'] = 0
-                                self.data_store[sid]['last_update'] = time.strftime("%H:%M:%S")
-                                self.data_store[sid]['timestamp'] = time.time() 
-                                self.data_store[sid]['success_count'] = self.data_store[sid].get('success_count', 0) + 1
                                 
-                                success = True
-                                break  # Başarılı
+                        except Exception as e:
+                            print(f"Komut Hatası (ID {sid}): {e}")
+                        
+                    time.sleep(0.1) # Komutlar arası nefes payı (Artırıldı)
+                except queue.Empty:
+                    pass
+            
+            if had_command:
+                self.after(0, self._update_ui_data)
+                # Komut sonrası döngüye hemen girmesin, slave toparlasın
+                time.sleep(0.1)
+                continue
 
-                            except Exception:
-                                pass  # Retry
+            # 2. Periyodik Sorgu
+            if not self.devices:
+                time.sleep(0.5)
+                continue
+            
+            if device_index >= len(self.devices):
+                device_index = 0
+            
+            device = self.devices[device_index]
+            sid = device['id']
+            
+            # Loop Time Hesabı
+            now = time.time()
+            if sid in self.data_store:
+                last_poll = self.data_store[sid].get('last_poll_ts', 0)
+                if last_poll > 0:
+                    loop_time = (now - last_poll) * 1000
+                    if loop_time < 20000: # Filtre: mantıksız değerleri ele
+                        self.data_store[sid]['loop_time'] = loop_time
+                self.data_store[sid]['last_poll_ts'] = now
 
-                        if attempt < 2: # Son deneme hariç bekle
-                            time.sleep(0.1)  # Retry arası bekleme
-
-                    if not success:
-                        # 3 denemenin hepsi başarısızsa ANINDA offline yap
-                        self.data_store[sid]['errors'] = 99
-                        self.data_store[sid]['online'] = False
-
-                    # Cihazlar arası minimal boşluk (Stabilite için eski ayar)
-                    time.sleep(0.1)
-
-                except Exception as e:
-                    print(f"Thread Loop Error (SID {sid}): {e}")
-
-            # UI güncelle
+            # Sorgula
+            self._query_periodic(sid)
+            
+            device_index += 1
+            # Döngü Hızı
+            time.sleep(0.05)
             self.after(0, self._update_ui_data)
-            # Sistem stabilitesi için ana döngü beklemesi (ESKİ HALİ)
-            time.sleep(0.5)
+
+    def _query_periodic(self, sid):
+        if sid not in self.data_store: return
+        success = False
+        self.data_store[sid]['total_count'] += 1
+
+        for attempt in range(2): # 2 Burst Retry
+            with self.poll_lock:
+                try:
+                    t_start = time.time()
+                    
+                    # Buffer Temizliği
+                    self.instrument.serial.reset_input_buffer()
+                    if attempt > 0: # Retry ise output da temizle
+                         self.instrument.serial.reset_output_buffer()
+                         time.sleep(0.05)
+                    
+                    self.instrument.address = sid
+                    
+                    # Read
+                    count = 9 if self.detail_open_for == sid else 3
+                    vals = self.instrument.read_registers(1, count, 3) # Reg 1..N
+                    
+                    t_end = time.time()
+                    latency = (t_end - t_start) * 1000
+                    
+                    self.data_store[sid]['latency'] = latency
+                    self.data_store[sid]['timestamp'] = t_end
+                    self.data_store[sid]['online'] = True
+                    self.data_store[sid]['errors'] = 0
+                    self.data_store[sid]['success_count'] += 1
+                    
+                    for i, v in enumerate(vals):
+                        self.data_store[sid]['cache'][1 + i] = v
+                    
+                    success = True
+                    break
+                except Exception:
+                    pass
+            
+            if not success: time.sleep(0.1) # Retry arası bekleme artırıldı
+        
+        if not success:
+            self.data_store[sid]['errors'] += 1
+            if self.data_store[sid]['errors'] >= 1:
+                self.data_store[sid]['online'] = False
 
     # ========================================================================
     #  DETAY POPUP
@@ -763,11 +713,10 @@ class HMIApp(ctk.CTk):
         device = next((d for d in self.devices if d['id'] == slave_id), None)
         if not device: return
 
-        self.detail_open_for = slave_id  # Tam okuma başlat
-
+        self.detail_open_for = slave_id
         popup = ctk.CTkToplevel(self)
         popup.title(f"Detaylar — {device['name']}")
-        popup.geometry("480x580")
+        popup.geometry("480x620")
         popup.configure(fg_color=COLORS['bg_mid'])
         popup.transient(self)
         popup.grab_set()
@@ -778,16 +727,8 @@ class HMIApp(ctk.CTk):
 
         popup.protocol("WM_DELETE_WINDOW", on_close)
 
-        data = self.data_store.get(slave_id, {})
-        cache = data.get('cache', {})
-
-        # Başlık
-        ctk.CTkLabel(popup, text=f"⚙  {device['name']}",
-                     font=("Segoe UI", 18, "bold"), text_color=COLORS['text']).pack(pady=(20, 2))
-        ctk.CTkLabel(popup, text=f"Slave ID: {slave_id}",
-                     font=("Consolas", 10), text_color=COLORS['text_dim']).pack(pady=(0, 12))
-
-        # Ayraç
+        ctk.CTkLabel(popup, text=f"⚙  {device['name']}", font=("Segoe UI", 18, "bold"), text_color=COLORS['text']).pack(pady=(20, 2))
+        ctk.CTkLabel(popup, text=f"Slave ID: {slave_id}", font=("Consolas", 10), text_color=COLORS['text_dim']).pack(pady=(0, 12))
         ctk.CTkFrame(popup, height=1, fg_color=COLORS['glass_border']).pack(fill="x", padx=30, pady=(0, 12))
 
         entries = []
@@ -797,68 +738,57 @@ class HMIApp(ctk.CTk):
             row.pack(fill="x", padx=28, pady=3)
             row.pack_propagate(False)
 
-            inner_row = ctk.CTkFrame(row, fg_color="transparent")
-            inner_row.pack(fill="both", expand=True, padx=12, pady=4)
+            inner = ctk.CTkFrame(row, fg_color="transparent")
+            inner.pack(fill="both", expand=True, padx=12, pady=4)
 
-            ctk.CTkLabel(inner_row, text=p['label'], width=130, anchor="w",
-                         font=("Segoe UI", 11), text_color=COLORS['text_label']).pack(side="left")
-
-            lbl_val = ctk.CTkLabel(inner_row, text="---", width=55,
-                                   text_color=COLORS['accent_glow'],
-                                   font=("Consolas", 13, "bold"))
+            ctk.CTkLabel(inner, text=p['label'], width=130, anchor="w", font=("Segoe UI", 11), text_color=COLORS['text_label']).pack(side="left")
+            lbl_val = ctk.CTkLabel(inner, text="---", width=55, text_color=COLORS['accent_glow'], font=("Consolas", 13, "bold"))
             lbl_val.pack(side="left")
             value_labels.append((p, lbl_val))
 
-            e = ctk.CTkEntry(inner_row, width=90, height=28, corner_radius=8,
-                             fg_color=COLORS['glass_input'],
-                             border_color=COLORS['glass_border'],
-                             font=("Consolas", 11), justify="center")
+            e = ctk.CTkEntry(inner, width=90, height=28, corner_radius=8, fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'], font=("Consolas", 11), justify="center")
             e.pack(side="right")
             entries.append((p, e))
 
         lbl_err = ctk.CTkLabel(popup, text="", font=("Segoe UI", 10))
         lbl_err.pack(pady=6)
 
-        # İstatistik Paneli
+        # İstatistikler
         stats_frame = ctk.CTkFrame(popup, fg_color="transparent")
-        stats_frame.pack(fill="x", padx=30, pady=(0, 6))
+        stats_frame.pack(fill="x", padx=30, pady=5)
         
-        lbl_latency = ctk.CTkLabel(stats_frame, text="Ping: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'])
-        lbl_latency.pack(side="left")
+        # Sol ve Sağ Sütun
+        col1 = ctk.CTkFrame(stats_frame, fg_color="transparent")
+        col1.pack(side="left", fill="y")
+        col2 = ctk.CTkFrame(stats_frame, fg_color="transparent")
+        col2.pack(side="right", fill="y")
 
-        lbl_cmd_lat = ctk.CTkLabel(stats_frame, text="Komut: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'])
-        lbl_cmd_lat.pack(side="left", padx=10)
+        lbl_ping = ctk.CTkLabel(col1, text="Ping: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="w")
+        lbl_ping.pack(fill="x")
+        lbl_cmd = ctk.CTkLabel(col1, text="Cmd Lat: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="w")
+        lbl_cmd.pack(fill="x")
         
-        lbl_success = ctk.CTkLabel(stats_frame, text="Başarı: --%", font=("Consolas", 10), text_color=COLORS['text_dim'])
-        lbl_success.pack(side="right")
+        lbl_slave = ctk.CTkLabel(col2, text="Slave Resp: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="e")
+        lbl_slave.pack(fill="x")
+        lbl_loop = ctk.CTkLabel(col2, text="Loop Time: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="e")
+        lbl_loop.pack(fill="x")
 
-        # Canlı güncelleme döngüsü
         def refresh_values():
-            if self.detail_open_for != slave_id:
-                return
-            
-            d_data = self.data_store.get(slave_id, {})
-            cache = d_data.get('cache', {})
-            
-            # Değerleri güncelle
+            if self.detail_open_for != slave_id: return
+            d = self.data_store.get(slave_id, {})
+            cache = d.get('cache', {})
+
             for p, lbl in value_labels:
                 raw = cache.get(p['reg'], 0)
                 cur = raw - 10 if p.get('offset') else raw
-                if lbl.cget("text") != str(cur):
-                    lbl.configure(text=str(cur))
+                lbl.configure(text=str(cur))
             
-            # İstatistikleri güncelle
-            lat = d_data.get('latency', 0)
-            cmd_lat = d_data.get('cmd_latency', 0)
-            suc = d_data.get('success_count', 0)
-            tot = d_data.get('total_count', 1) # div0 koruması
-            rate = (suc / tot) * 100 if tot > 0 else 0
+            lbl_ping.configure(text=f"Ping: {d.get('latency',0):.0f} ms")
+            lbl_cmd.configure(text=f"Cmd Lat: {d.get('cmd_latency',0):.0f} ms")
+            lbl_slave.configure(text=f"Slave Resp: {d.get('slave_resp_time',0):.0f} ms")
+            lbl_loop.configure(text=f"Loop Time: {d.get('loop_time',0):.0f} ms")
             
-            lbl_latency.configure(text=f"Ping: {lat} ms")
-            lbl_cmd_lat.configure(text=f"Komut: {cmd_lat} ms" if cmd_lat > 0 else "Komut: --")
-            lbl_success.configure(text=f"Başarı: {rate:.1f}%")
-
-            popup.after(250, refresh_values) # Daha hızlı UI update
+            popup.after(250, refresh_values)
 
         refresh_values()
 
@@ -871,35 +801,28 @@ class HMIApp(ctk.CTk):
                 try:
                     val = int(val_str)
                     if val < p['min'] or val > p['max']:
-                        errors.append(f"{p['label']}: {p['min']}..{p['max']} aralığında olmalı!")
+                        errors.append(f"{p['label']}: Aralık {p['min']}-{p['max']}")
                         continue
-                    writes[p['reg']] = val + 10 if p.get('offset') else val
-                except ValueError:
-                    errors.append(f"{p['label']}: Sayısal değer girin!")
+                    # Kuyruğa at 
+                    self._send_command_settings(slave_id, p['reg'], val + 10 if p.get('offset') else val)
+                except ValueError: errors.append(f"{p['label']}: Sayı girin")
+            
+            if errors: lbl_err.configure(text="\n".join(errors), text_color=COLORS['red'])
+            else: 
+                lbl_err.configure(text="✓ Kuyruğa alındı", text_color=COLORS['green'])
+                for _, e in entries: e.delete(0, 'end')
 
-            if errors:
-                lbl_err.configure(text="\n".join(errors), text_color=COLORS['red'])
-                return
-
-            if writes:
-                self.data_store[slave_id]['pending'].update(writes)
-                lbl_err.configure(text=f"✓ {len(writes)} parametre kuyruğa alındı", text_color=COLORS['green'])
-                for _, e in entries:
-                    e.delete(0, 'end')
-
-        # Ayraç
         ctk.CTkFrame(popup, height=1, fg_color=COLORS['glass_border']).pack(fill="x", padx=30, pady=(6, 0))
-
-        ctk.CTkButton(popup, text="UYGULA", font=("Segoe UI", 12, "bold"), height=38,
-                      corner_radius=12,
-                      fg_color=COLORS['green_dark'], hover_color=COLORS['green'],
-                      command=apply).pack(pady=(14, 6), padx=28, fill="x")
-        ctk.CTkButton(popup, text="KAPAT", font=("Segoe UI", 11), height=32,
-                      corner_radius=10,
-                      fg_color=COLORS['glass_surface'], hover_color=COLORS['bg_card_hover'],
-                      border_width=1, border_color=COLORS['glass_border'],
+        ctk.CTkButton(popup, text="UYGULA", font=("Segoe UI", 12, "bold"), height=38, corner_radius=12,
+                      fg_color=COLORS['green_dark'], hover_color=COLORS['green'], command=apply).pack(pady=(14, 6), padx=28, fill="x")
+        ctk.CTkButton(popup, text="KAPAT", font=("Segoe UI", 11), height=32, corner_radius=10,
+                      fg_color=COLORS['glass_surface'], hover_color=COLORS['bg_card_hover'], border_width=1, border_color=COLORS['glass_border'],
                       command=on_close).pack(padx=28, fill="x")
 
+    def _send_command_settings(self, sid, reg, val):
+        """Ayar değişikliği için genel komut gönderici (aynı kuyruğu kullanır)."""
+        if sid not in self.data_store: return
+        self.command_queue.put((sid, reg, val, 0)) # Settings için TS önemli değil
 
 if __name__ == "__main__":
     app = HMIApp()
