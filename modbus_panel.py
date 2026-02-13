@@ -163,7 +163,8 @@ class HMIApp(ctk.CTk):
                         'cache': {}, 'pending': {}, 'online': True, 'errors': 0, 'last_update': '',
                         'latency': 0, 'success_count': 0, 'total_count': 0,
                         'cmd_latency': 0, 'last_cmd_ts': 0,
-                        'slave_resp_time': 0, 'loop_time': 0, 'last_poll_ts': 0
+                        'slave_resp_time': 0, 'loop_time': 0, 'last_poll_ts': 0,
+                        'slave_resp_history': [], 'loop_time_history': [] # ORTALAMA İÇİN
                     }
         except Exception as e:
             print(f"Config Yükleme Hatası: {e}")
@@ -504,7 +505,8 @@ class HMIApp(ctk.CTk):
                     'cache': {}, 'pending': {}, 'online': True, 'errors': 0, 'last_update': '',
                     'latency': 0, 'success_count': 0, 'total_count': 0,
                     'cmd_latency': 0, 'last_cmd_ts': 0,
-                    'slave_resp_time': 0, 'loop_time': 0, 'last_poll_ts': 0
+                    'slave_resp_time': 0, 'loop_time': 0, 'last_poll_ts': 0,
+                    'slave_resp_history': [], 'loop_time_history': []
                 }
                 
                 try: self._save_config()
@@ -538,7 +540,10 @@ class HMIApp(ctk.CTk):
 
     def _update_device_name(self, sid, name):
         for d in self.devices:
-            if d['id'] == sid: d['name'] = name; break
+            if d['id'] == sid: 
+                d['name'] = name
+                self._save_config() # KAYIT ET
+                break
 
     # ========================================================================
     #  MODBUS POLL MOTOR
@@ -595,40 +600,75 @@ class HMIApp(ctk.CTk):
                     had_command = True
                     processed_cmds += 1
                     
-                    with self.poll_lock:
-                        start_time = time.time()
-                        try:
-                            # Buffer Temizliği (Çakışmayı önler)
-                            self.instrument.serial.reset_input_buffer()
-                            self.instrument.serial.reset_output_buffer()
-                            time.sleep(0.02) # Kısa bekleme
-
-                            self.instrument.address = sid
-                            # Function code 6 (Write Single Register)
-                            self.instrument.write_register(reg, val, 0, functioncode=6)
-                            
-                            # Metrics Update
-                            end_time = time.time()
-                            resp_time = (end_time - start_time) * 1000
-                            
-                            if sid in self.data_store:
-                                self.data_store[sid]['slave_resp_time'] = resp_time
-                                if ts > 0:
-                                    self.data_store[sid]['cmd_latency'] = (end_time - ts) * 1000
-                                self.data_store[sid]['online'] = True
-                                self.data_store[sid]['errors'] = 0
+                    # RETRY LOGIC (3 Deneme)
+                    cmd_success = False
+                    for attempt in range(3):
+                        with self.poll_lock:
+                            try:
+                                # Buffer Temizliği (Her denemede)
+                                self.instrument.serial.reset_input_buffer()
+                                if attempt > 0: time.sleep(0.1) # Retry ise bekle
                                 
-                        except Exception as e:
-                            print(f"Komut Hatası (ID {sid}): {e}")
+                                self.instrument.address = sid
+                                
+                                # Timeout Ayarı (Yazma işlemi için)
+                                # Başarı genelde 0.2s sürüyor. 0.4s timeout yeterli.
+                                # Hata olursa hızlıca retry'a düşsün (0.7s bekletmesin).
+                                old_timeout = self.instrument.serial.timeout
+                                self.instrument.serial.timeout = 0.4
+                                
+                                start_time = time.time() # METRICS: Start timer here
+                                try:
+                                    # Öncesinde sessizlik (Bus stabilization)
+                                    time.sleep(0.05)
+                                    
+                                    # Function code 6 (Write Single Register)
+                                    print(f"DEBUG: Cmd {sid} -> Reg:{reg} Val:{val} (Try {attempt+1})")
+                                    self.instrument.write_register(reg, val, 0, functioncode=6)
+                                    print(f"DEBUG: Success! took {time.time() - start_time:.3f}s")
+                                finally:
+                                    self.instrument.serial.timeout = old_timeout
+                                
+                                # Metrics Update
+                                end_time = time.time()
+                                resp_time = (end_time - start_time) * 1000
+                                
+                                if sid in self.data_store:
+                                    self.data_store[sid]['slave_resp_time'] = resp_time
+                                    # History Update
+                                    hist = self.data_store[sid].get('slave_resp_history', [])
+                                    hist.append(resp_time)
+                                    if len(hist) > 20: hist.pop(0)
+                                    self.data_store[sid]['slave_resp_history'] = hist
+
+                                    if ts > 0:
+                                        self.data_store[sid]['cmd_latency'] = (end_time - ts) * 1000
+                                    self.data_store[sid]['online'] = True
+                                    self.data_store[sid]['errors'] = 0
+                                    
+                                    # CACHE UPDATE
+                                    if reg != REG_COMMAND:
+                                        self.data_store[sid]['cache'][reg] = val
+                                
+                                cmd_success = True
+                                break # Başarılı, döngüden çık
+                                
+                            except Exception as e:
+                                err_msg = str(e)
+                                if "No communication" in err_msg:
+                                    print(f"Meşgul, tekrar deneniyor ({attempt+1}/3)...")
+                                else:
+                                    print(f"Komut Hatası (ID {sid}, Try {attempt+1}): {e}")
                         
-                    time.sleep(0.1) # Komutlar arası nefes payı (Artırıldı)
+                        # Loop dışında bekleme (Lock serbestken)
+                        if not cmd_success: time.sleep(0.1)
+
+                    time.sleep(0.05) # Komutlar arası minik boşluk
                 except queue.Empty:
                     pass
             
             if had_command:
                 self.after(0, self._update_ui_data)
-                # Komut sonrası döngüye hemen girmesin, slave toparlasın
-                time.sleep(0.1)
                 continue
 
             # 2. Periyodik Sorgu
@@ -650,6 +690,11 @@ class HMIApp(ctk.CTk):
                     loop_time = (now - last_poll) * 1000
                     if loop_time < 20000: # Filtre: mantıksız değerleri ele
                         self.data_store[sid]['loop_time'] = loop_time
+                        # History Update
+                        hist = self.data_store[sid].get('loop_time_history', [])
+                        hist.append(loop_time)
+                        if len(hist) > 20: hist.pop(0)
+                        self.data_store[sid]['loop_time_history'] = hist
                 self.data_store[sid]['last_poll_ts'] = now
 
             # Sorgula
@@ -770,8 +815,13 @@ class HMIApp(ctk.CTk):
         
         lbl_slave = ctk.CTkLabel(col2, text="Slave Resp: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="e")
         lbl_slave.pack(fill="x")
+        lbl_slave_avg = ctk.CTkLabel(col2, text="Avg: -- ms", font=("Consolas", 9), text_color=COLORS['text_dim'], anchor="e")
+        lbl_slave_avg.pack(fill="x")
+
         lbl_loop = ctk.CTkLabel(col2, text="Loop Time: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="e")
         lbl_loop.pack(fill="x")
+        lbl_loop_avg = ctk.CTkLabel(col2, text="Avg: -- ms", font=("Consolas", 9), text_color=COLORS['text_dim'], anchor="e")
+        lbl_loop_avg.pack(fill="x")
 
         def refresh_values():
             if self.detail_open_for != slave_id: return
@@ -786,7 +836,17 @@ class HMIApp(ctk.CTk):
             lbl_ping.configure(text=f"Ping: {d.get('latency',0):.0f} ms")
             lbl_cmd.configure(text=f"Cmd Lat: {d.get('cmd_latency',0):.0f} ms")
             lbl_slave.configure(text=f"Slave Resp: {d.get('slave_resp_time',0):.0f} ms")
+            
+            # Avg calc
+            hist_s = d.get('slave_resp_history', [])
+            avg_s = sum(hist_s)/len(hist_s) if hist_s else 0
+            lbl_slave_avg.configure(text=f"(Avg: {avg_s:.0f} ms)")
+
             lbl_loop.configure(text=f"Loop Time: {d.get('loop_time',0):.0f} ms")
+            
+            hist_l = d.get('loop_time_history', [])
+            avg_l = sum(hist_l)/len(hist_l) if hist_l else 0
+            lbl_loop_avg.configure(text=f"(Avg: {avg_l:.0f} ms)")
             
             popup.after(250, refresh_values)
 

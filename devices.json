@@ -1,30 +1,30 @@
 [
     {
         "id": 1,
-        "name": "Yeni Cihaz"
+        "name": "1"
     },
     {
         "id": 3,
-        "name": "Yeni Cihaz"
+        "name": "3"
     },
     {
         "id": 4,
-        "name": "Yeni Cihaz"
+        "name": "4"
     },
     {
         "id": 7,
-        "name": "Yeni Cihaz"
+        "name": "7"
     },
     {
         "id": 9,
-        "name": "Yeni Cihaz"
+        "name": "9"
     },
     {
         "id": 2,
-        "name": "Yeni Cihaz"
+        "name": "2"
     },
     {
         "id": 8,
-        "name": "Yeni Cihaz"
+        "name": "8"
     }
 ]
