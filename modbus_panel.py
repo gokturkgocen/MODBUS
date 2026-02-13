@@ -297,7 +297,7 @@ class HMIApp(ctk.CTk):
             self.lbl_empty.pack_forget()
 
         # Grid yerleşimi
-        cols = max(1, min(4, len(self.devices)))
+        cols = max(1, min(6, len(self.devices)))
         for i, (sid, ui) in enumerate(self.device_cards_ui.items()):
             r, c = divmod(i, cols)
             ui['frame'].grid(row=r, column=c, padx=10, pady=10, sticky="nsew")
@@ -324,6 +324,7 @@ class HMIApp(ctk.CTk):
         name_entry.insert(0, name)
         name_entry.pack(fill="x", pady=(0, 6))
         name_entry.bind("<FocusOut>", lambda e, s=sid, ent=name_entry: self._update_device_name(s, ent.get()))
+        name_entry.bind("<Return>", lambda e, s=sid, ent=name_entry: (self._update_device_name(s, ent.get()), self.focus()))
 
         # ── Status LED (Sağ Üst Köşe) - ARTIK KULLANILMIYOR (Görünmez yapabiliriz veya kaldırabiliriz) ──
         # Kullanıcı arkaplan rengini istiyor, ama kod hatası olmasın diye widget'ı tutuyoruz, siliyoruz.
@@ -336,12 +337,12 @@ class HMIApp(ctk.CTk):
         
         # Hata İkonu (Sol)
         icon_err = ctk.CTkLabel(icon_frame, text="▲", font=("Arial", 24), text_color=COLORS['bg_card']) # Başlangıçta Görünmez
-        icon_err.pack(side="left", padx=10)
+        # icon_err.pack(side="left", padx=10) # Başlangıçta pack etme
         tooltip_err = CTkToolTip(icon_err, "Hata Yok")
 
         # Uyarı İkonu (Sağ)
         icon_warn = ctk.CTkLabel(icon_frame, text="▲", font=("Arial", 24), text_color=COLORS['bg_card']) # Başlangıçta Görünmez
-        icon_warn.pack(side="right", padx=10)
+        # icon_warn.pack(side="right", padx=10) # Başlangıçta pack etme
         tooltip_warn = CTkToolTip(icon_warn, "Uyarı Yok")
         
         # ── Durum Yazısı (AÇIK/KAPALI) ──
@@ -353,6 +354,9 @@ class HMIApp(ctk.CTk):
         # ── Kontrol Butonları (Glass pill) ──
         btn_frame = ctk.CTkFrame(content, fg_color="transparent")
         btn_frame.pack(fill="x", pady=(6, 6))
+        # Grid düzeni ile %50 - %50 paylaşım
+        btn_frame.columnconfigure(0, weight=1)
+        btn_frame.columnconfigure(1, weight=1)
 
         btn_on = ctk.CTkButton(btn_frame, text="AÇ",
                       font=("Segoe UI", 11, "bold"), height=34,
@@ -360,7 +364,7 @@ class HMIApp(ctk.CTk):
                       corner_radius=12,
                       command=lambda s=sid: self._send_command(s, 1)
                       )
-        btn_on.pack(side="left", expand=True, fill="x", padx=(0, 3))
+        btn_on.grid(row=0, column=0, padx=(0, 3), sticky="ew")
 
         btn_off = ctk.CTkButton(btn_frame, text="KAPAT",
                       font=("Segoe UI", 11, "bold"), height=34,
@@ -368,10 +372,10 @@ class HMIApp(ctk.CTk):
                       corner_radius=12,
                       command=lambda s=sid: self._send_command(s, 2)
                       )
-        btn_off.pack(side="right", expand=True, fill="x", padx=(3, 0))
+        btn_off.grid(row=0, column=1, padx=(3, 0), sticky="ew")
 
         # ── Detay Butonu (Glass surface) ──
-        ctk.CTkButton(content, text="⚙  Detaylar",
+        ctk.CTkButton(content, text="⚙  Ayarlar",
                       font=("Segoe UI", 10), height=28,
                       fg_color=COLORS['glass_surface'],
                       hover_color=COLORS['bg_card_hover'],
@@ -424,9 +428,9 @@ class HMIApp(ctk.CTk):
                     
                     
                     
-                    # Durum Yazısı Güncelleme
+                    # Durum Yazısı Güncelleme - Nötr Renk
                     status_text = STATUS_TEXT.get(status, "Bilinmiyor")
-                    ui['lbl_status'].configure(text=status_text, text_color=STATUS_COLOR.get(status, COLORS['text_dim']))
+                    ui['lbl_status'].configure(text=status_text, text_color=COLORS['text'])
                     
                     # Bağlantı Durumu Arka Planı (Online/Offline)
                     if not online:
@@ -483,30 +487,36 @@ class HMIApp(ctk.CTk):
                         if not active_warnings:
                             active_warnings.append(f"• Kod: {warn_val}")
                     
-                    # İkon Durumları (Hata/Uyarı yoksa görünmez olsun - bg_card rengi)
+                    # İkon Durumları (Hata/Uyarı yoksa görünmez olsun - pack_forget)
                     # Kırmızı Üçgen (Hata)
                     if active_errors:
                         # Hata Var -> Görünür Kırmızı
+                        if not ui['icon_err'].winfo_ismapped():
+                            ui['icon_err'].pack(side="left", padx=10)
                         ui['icon_err'].configure(text_color=COLORS['red']) 
                         ui['tooltip_err'].label.configure(text="\n".join(active_errors))
                     else:
-                        # Hata Yok -> Görünmez (bg_card rengi)
-                        bg_current = ui['frame'].cget("fg_color") # Arka plan neyse o renkte olsun
-                        ui['icon_err'].configure(text_color=bg_current) 
+                        # Hata Yok -> Görünmez (pack_forget)
+                        ui['icon_err'].pack_forget()
+                        # Tooltip'i boşalt
                         ui['tooltip_err'].label.configure(text="")
 
                     # Sarı Üçgen (Uyarı)
                     if online and active_warnings:
                         # Uyarı Var -> Görünür Sarı
+                        if not ui['icon_warn'].winfo_ismapped():
+                            ui['icon_warn'].pack(side="right", padx=10)
                         ui['icon_warn'].configure(text_color=COLORS['yellow']) 
                         ui['tooltip_warn'].label.configure(text="\n".join(active_warnings))
                     elif online and is_stale:
+                        if not ui['icon_warn'].winfo_ismapped():
+                            ui['icon_warn'].pack(side="right", padx=10)
                         ui['icon_warn'].configure(text_color=COLORS['yellow'])
                         ui['tooltip_warn'].label.configure(text="VERİ GECİKMESİ")
                     else:
                         # Uyarı Yok -> Görünmez
-                        bg_current = ui['frame'].cget("fg_color")
-                        ui['icon_warn'].configure(text_color=bg_current) 
+                        ui['icon_warn'].pack_forget()
+                        # Tooltip'i boşalt
                         ui['tooltip_warn'].label.configure(text="")
                     
                 except Exception as e:
