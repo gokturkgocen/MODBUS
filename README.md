@@ -1,60 +1,60 @@
 # Modbus RTU HMI Control Panel
 
-Modern ve şık bir arayüze ("Matrix" teması) sahip, Python ile geliştirilmiş Modbus RTU kontrol paneli uygulaması. Birden fazla Modbus cihazını (slave) seri port (RS485/RS232) üzerinden izlemenize ve kontrol etmenize olanak tanır.
+A Python-based Modbus RTU control panel application featuring a modern, sleek interface inspired by the "Matrix" aesthetic. This software allows you to seamlessly monitor and control multiple Modbus devices (slaves) concurrently via serial port connections (RS485/RS232).
 
-## Özellikler
+## Key Features
 
-- **Çoklu Cihaz Desteği**: Birden fazla Modbus node'u ekleyip eşzamanlı olarak durumlarını takip edebilirsiniz.
-- **Sıralı ve Öncelikli Polling**: Arka planda çalışan polling (sorgulama) mekanizması ile veriler düzenli olarak güncellenir. Kullanıcı komutları (yazma işlemleri) kuyrukta önceliklendirilir.
-- **Detaylı Hata İzleme**: Cihaz bağlantı hataları, gecikmeler (lag) ve Modbus iletişim hataları arayüzde anlık olarak gösterilir.
-- **Özelleştirilebilir Parametreler**: Her cihaz için açılış/kapanış hızı, tork veya süre gibi Modbus register'larına kolay erişim arayüzü içerir.
-- **Matrix Teması**: `CustomTkinter` kullanılarak koyu arka plan ve yeşil fosforlu vurgulara dayalı terminal stili modern arayüz tasarımı (Matrix filmi estetiği).
+- **Multi-Device Support**: Add and monitor multiple Modbus nodes simultaneously, keeping track of their status in real-time.
+- **Sequential & Priority Polling**: A background polling mechanism ensures continuous data updates, while a queue-based priority system handles user commands (write operations) with minimal latency.
+- **Detailed Error Tracking**: Real-time display of device connection issues, communication lag, and Modbus-specific errors directly on the interface.
+- **Customizable Parameters**: Easy-to-use interface to access and modify Modbus registers for each device, including opening/closing speeds, torque, or custom durations.
+- **Matrix-Themed UI**: Built using `CustomTkinter`, the application features a dark background with vibrant neon-green accents, delivering a professional, terminal-style aesthetic.
 
-## Gereksinimler
+## Requirements
 
-Proje, Python 3.10 veya daha güncel bir sürümle çalışacak şekilde tasarlanmıştır.
+This project is designed to run on Python 3.10 or newer.
 
-Gerekli Python kütüphanelerini kurmak için projeyi klonladıktan sonra aşağıdaki komutu çalıştırın:
+To install the required dependencies, execute the following command after cloning the repository:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Kullanılan başlıca kütüphaneler şunlardır:
-- `customtkinter`: Modern arayüz için.
-- `minimalmodbus`: Modbus RTU haberleşmesi için.
-- `pyserial`: Seri port erişimi için.
+### Core Dependencies
+- `customtkinter`: For the modern GUI.
+- `minimalmodbus`: For handling Modbus RTU communication.
+- `pyserial`: For serial port access and management.
 
-## Kurulum ve Kullanım
+## Installation & Usage Guide
 
-1. Repoyu bilgisayarınıza indirin (klonlayın):
+1. Clone the repository to your local machine:
    ```bash
    git clone <repo-url>
    cd MODBUS
    ```
 
-2. Gerekli kütüphaneleri yükleyin:
+2. Install the necessary Python packages:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Uygulamayı başlatın:
+3. Launch the application:
    ```bash
    python modbus_panel.py
    ```
 
-4. **Kullanım Adımları**:
-   - Üst kısımdaki araç çubuğundan (Toolbar) uygun `PORT` (COMy) ve `BAUD` oranını (örn. 9600) seçin.
-   - `[+ ADD NODE]` butonuna basarak kontrol etmek istediğiniz cihazların Slave ID'lerini (örn. 1, 2) ve isimlerini (etiketlerini) girin.
-   - `[ EXEC CONNECT ]` butonuna basarak seri haberleşmeyi (polling) başlatın. Cihazlarınız çevrimiçi olduğunda durumları ("ONLINE") yeşil renkle güncellenecektir.
-   - Cihaz kartları üzerindeki butonlarla (AÇ/KAPAT) komut gönderebilir veya `[SETTINGS]` menüsünden daha detaylı register değerlerini güncelleyebilirsiniz.
+4. **Operation Steps**:
+   - Select the appropriate `PORT` (e.g., COMx) and `BAUD` rate (e.g., 9600) from the top Toolbar.
+   - Click the `[+ ADD NODE]` button to register the devices you wish to control by providing their Slave IDs (e.g., 1, 2) and custom labels.
+   - Press `[ EXEC CONNECT ]` to initialize serial communication (polling). Once devices are online, their status will update to a glowing green "ONLINE".
+   - Control devices directly via the action buttons (e.g., OPEN/CLOSE) on their respective cards, or access the `[SETTINGS]` menu to update granular register values.
 
-## Dosya Yapısı
+## File Structure
 
-- `modbus_panel.py`: Uygulamanın ana kaynak kodu (arayüz ve haberleşme mantığı).
-- `devices.json`: Eklenen cihazların (slave ID ve etiketleri) uygulamaya kaydedildiği yapılandırma dosyası (uygulama çalıştıkça otomatik oluşur/güncellenir).
-- `requirements.txt`: Python bağımlılıklarının listesi.
+- `modbus_panel.py`: The main source code, containing both the GUI implementation and Modbus communication logic.
+- `devices.json`: A configuration file that stores the registered slave IDs and device labels (automatically generated/updated during runtime).
+- `requirements.txt`: The list of required Python dependencies.
 
-## Lisans
+## License
 
-Bu proje kişisel/geliştirme kullanımı amacıyla oluşturulmuştur.
+This project was developed for personal and developmental purposes.
