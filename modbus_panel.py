@@ -12,37 +12,41 @@ import queue
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-# --- LIQUID GLASS RENK PALETİ ---
+STATUS_TEXT = {0: "[IDLE]", 1: "AÇIK", 2: "KAPALI"}
+
+# --- MATRIX THEME PALETTE ---
 COLORS = {
-    'bg_dark':       "#06070D",
-    'bg_mid':        "#0D0F1A",
-    'bg_card':       "#141825",
-    'bg_card_hover': "#1C2033",
-    'bg_card_open':  "#102A20",
-    'bg_card_closed':"#2A1515",
-    'glass_border':  "#2A3350",
-    'glass_glow':    "#4A6CF7",
-    'glass_surface': "#181D2E",
-    'glass_input':   "#111526",
-    'toolbar_bg':    "#0A0C14",
-    'toolbar_border':"#1E2340",
-    'accent':        "#5B8DEF",
-    'accent_dark':   "#3D6FD9",
-    'accent_glow':   "#7AABFF",
-    'green':         "#34D399",
-    'green_dark':    "#059669",
-    'red':           "#F87171",
-    'red_dark':      "#DC2626",
-    'yellow':        "#FBBF24",
-    'orange':        "#FB923C",
-    'text':          "#E8ECF4",
-    'text_dim':      "#6B7A99",
-    'text_label':    "#8B9BC0",
+    'bg_dark':       "#000000", # Pure Black
+    'bg_mid':        "#000D00", # Deep Matrix Green
+    'bg_card':       "#000000", # Cards are black
+    'bg_card_hover': "#001A00", # Subtle green lift
+    
+    # Status Colors (Neon Matrix)
+    'matrix_green':  "#00FF41", # Classic Matrix Green
+    'matrix_glow':   "#00FF41", 
+    'matrix_dark':   "#003B00", # Deep Forest Green
+    
+    'border':        "#003B00", # Dark Green Border
+    'border_glow':   "#00FF41", # Bright Green Glow
+    
+    'toolbar_bg':    "#000000",
+    'toolbar_border':"#003B00",
+    
+    'accent':        "#00FF41", 
+    'accent_dim':    "#008F11", # Dimmer green
+    
+    'green':         "#00FF41", 
+    'red':           "#FF0000", # Red strictly for critical errors
+    'yellow':        "#FFFF00", # Yellow for warnings
+    
+    'text':          "#00FF41", # Standard Matrix Text (Green)
+    'text_dim':      "#008F11", # Muted Terminal Green
+    'text_label':    "#003B00", # Dark label text
+    'text_white':    "#E8F5E9", # Slightly tinted white for high contrast
+    
     'transparent':   "transparent",
-    'dim_icon':      "#333842",
-    'btn_dim':       "#222633",
-    'border':        "#2A3350",
-    'surface':       "#181D2E",
+    'dim_icon':      "#003B00",
+    'btn_dim':       "#000D00",
 }
 
 class CTkToolTip(ctk.CTkToplevel):
@@ -188,54 +192,58 @@ class HMIApp(ctk.CTk):
         inner = ctk.CTkFrame(toolbar, fg_color="transparent")
         inner.pack(fill="x", padx=20, pady=10)
 
-        ctk.CTkLabel(inner, text="◆", font=("Segoe UI", 18), text_color=COLORS['accent']).pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(inner, text="HMI", font=("Segoe UI", 14, "bold"), text_color=COLORS['text']).pack(side="left", padx=(0, 16))
+        ctk.CTkLabel(inner, text="☢", font=("Consolas", 18), text_color=COLORS['accent']).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(inner, text="MODBUS SYSTEM", font=("Consolas", 14, "bold"), text_color=COLORS['text']).pack(side="left", padx=(0, 16))
 
-        sep = ctk.CTkFrame(inner, width=1, height=28, fg_color=COLORS['glass_border'])
+        sep = ctk.CTkFrame(inner, width=1, height=28, fg_color=COLORS['border'])
         sep.pack(side="left", padx=(0, 16))
 
-        ctk.CTkLabel(inner, text="PORT", font=("Segoe UI", 9, "bold"), text_color=COLORS['text_dim']).pack(side="left", padx=(0, 4))
+        ctk.CTkLabel(inner, text="PORT:", font=("Consolas", 9, "bold"), text_color=COLORS['text_dim']).pack(side="left", padx=(0, 4))
         ports = [p.device for p in serial.tools.list_ports.comports()] or ["Port Yok"]
         self.combo_port = ctk.CTkComboBox(inner, values=ports, width=115, height=30,
-                                          font=("Consolas", 11), corner_radius=8,
-                                          fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'],
-                                          button_color=COLORS['glass_border'], button_hover_color=COLORS['accent_dark'],
-                                          dropdown_fg_color=COLORS['bg_card'])
+                                          font=("Consolas", 11), corner_radius=0,
+                                          fg_color=COLORS['bg_dark'], border_color=COLORS['border'],
+                                          button_color=COLORS['border'], button_hover_color=COLORS['matrix_dark'],
+                                          dropdown_fg_color=COLORS['bg_dark'], dropdown_text_color=COLORS['text'])
         self.combo_port.pack(side="left", padx=(0, 10))
 
-        ctk.CTkLabel(inner, text="BAUD", font=("Segoe UI", 9, "bold"), text_color=COLORS['text_dim']).pack(side="left", padx=(0, 4))
+        ctk.CTkLabel(inner, text="BAUD:", font=("Consolas", 9, "bold"), text_color=COLORS['text_dim']).pack(side="left", padx=(0, 4))
         self.combo_baud = ctk.CTkComboBox(inner, values=["9600","19200","38400","57600","115200","230400","250000"],
                                           width=90, height=30,
-                                          font=("Consolas", 11), corner_radius=8,
-                                          fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'],
-                                          button_color=COLORS['glass_border'], button_hover_color=COLORS['accent_dark'],
-                                          dropdown_fg_color=COLORS['bg_card'])
+                                          font=("Consolas", 11), corner_radius=0,
+                                          fg_color=COLORS['bg_dark'], border_color=COLORS['border'],
+                                          button_color=COLORS['border'], button_hover_color=COLORS['matrix_dark'],
+                                          dropdown_fg_color=COLORS['bg_dark'], dropdown_text_color=COLORS['text'])
         self.combo_baud.set("9600")
         self.combo_baud.pack(side="left", padx=(0, 16))
 
-        sep2 = ctk.CTkFrame(inner, width=1, height=28, fg_color=COLORS['glass_border'])
+        sep2 = ctk.CTkFrame(inner, width=1, height=28, fg_color=COLORS['border'])
         sep2.pack(side="left", padx=(0, 16))
 
-        self.btn_add = ctk.CTkButton(inner, text="＋  Ekle", width=90, height=30,
-                                     font=("Segoe UI", 11, "bold"), corner_radius=15,
-                                     fg_color=COLORS['accent'], hover_color=COLORS['accent_dark'],
+        self.btn_add = ctk.CTkButton(inner, text="[+ ADD NODE]", width=100, height=32,
+                                     font=("Consolas", 11, "bold"), corner_radius=0,
+                                     fg_color="transparent", border_width=1, border_color=COLORS['border'],
+                                     hover_color=COLORS['matrix_dark'],
                                      command=self._open_add_device_dialog)
         self.btn_add.pack(side="left", padx=3)
 
-        self.btn_del = ctk.CTkButton(inner, text="✕  Sil", width=80, height=30,
-                                     font=("Segoe UI", 11, "bold"), corner_radius=15,
-                                     fg_color="#3D1520", hover_color=COLORS['red_dark'],
+        self.btn_del = ctk.CTkButton(inner, text="[X REMOVE]", width=90, height=32,
+                                     font=("Consolas", 11, "bold"), corner_radius=0,
+                                     fg_color="transparent", border_width=1, border_color="#3D0000",
+                                     hover_color="#3D0000", text_color=COLORS['red'],
                                      command=self._delete_selected_device)
         self.btn_del.pack(side="left", padx=3)
 
-        self.btn_connect = ctk.CTkButton(inner, text="⚡ Bağlan", width=110, height=30,
-                                         font=("Segoe UI", 11, "bold"), corner_radius=15,
-                                         fg_color=COLORS['green_dark'], hover_color=COLORS['green'],
+        # Matrix Connect Button
+        self.btn_connect = ctk.CTkButton(inner, text="[ EXEC CONNECT ]", width=140, height=34,
+                                         font=("Consolas", 12, "bold"), corner_radius=0,
+                                         fg_color="transparent", border_width=1, border_color=COLORS['matrix_green'],
+                                         hover_color=COLORS['matrix_dark'],
                                          command=self._toggle_connection)
-        self.btn_connect.pack(side="left", padx=(8, 0))
+        self.btn_connect.pack(side="left", padx=(12, 0))
 
-        self.lbl_toolbar_status = ctk.CTkLabel(inner, text="● Bağlı değil",
-                                               font=("Segoe UI", 11), text_color=COLORS['text_dim'])
+        self.lbl_toolbar_status = ctk.CTkLabel(inner, text=":: OFFLINE ::",
+                                               font=("Consolas", 10, "bold"), text_color=COLORS['text_dim'])
         self.lbl_toolbar_status.pack(side="right", padx=8)
 
     # ========================================================================
@@ -244,16 +252,16 @@ class HMIApp(ctk.CTk):
     def _build_grid_area(self):
         self.grid_container = ctk.CTkScrollableFrame(self, fg_color=COLORS['bg_dark'],
                                                      corner_radius=0,
-                                                     scrollbar_button_color=COLORS['glass_border'],
-                                                     scrollbar_button_hover_color=COLORS['accent_dark'])
+                                                     scrollbar_button_color=COLORS['border'],
+                                                     scrollbar_button_hover_color=COLORS['matrix_dark'])
         self.grid_container.pack(fill="both", expand=True, padx=20, pady=(12, 20))
 
         self.grid_frame = ctk.CTkFrame(self.grid_container, fg_color="transparent")
         self.grid_frame.pack(fill="both", expand=True)
 
         self.lbl_empty = ctk.CTkLabel(self.grid_frame,
-                                      text="Henüz cihaz eklenmedi.\n＋ Ekle ile başlayın.",
-                                      font=("Segoe UI", 16), text_color=COLORS['text_dim'])
+                                      text="[ SYSTEM_IDLE: NO_NODES_DETECTED ]\n[ EXECUTE (+ ADD NODE) TO INITIALIZE ]",
+                                      font=("Consolas", 14), text_color=COLORS['text_dim'])
         self.lbl_empty.pack(pady=100)
 
     def _sync_grid_layout(self):
@@ -282,96 +290,123 @@ class HMIApp(ctk.CTk):
             self.grid_frame.columnconfigure(c, weight=1)
 
     def _create_device_card(self, sid, name):
-        card = ctk.CTkFrame(self.grid_frame, fg_color=COLORS['bg_card'],
-                            corner_radius=16, border_width=1,
-                            border_color=COLORS['glass_border'],
-                            width=250, height=290)
+        # Matrix Terminal Frame
+        card = ctk.CTkFrame(self.grid_frame, fg_color=COLORS['bg_dark'],
+                            corner_radius=0, border_width=1,
+                            border_color=COLORS['border'],
+                            width=230, height=210)
         card.pack_propagate(False)
 
+        # Content Layer
         content = ctk.CTkFrame(card, fg_color="transparent")
-        content.pack(fill="both", expand=True, padx=16, pady=14)
+        content.pack(fill="both", expand=True, padx=12, pady=10)
 
-        # Başlık ve İsim
-        name_entry = ctk.CTkEntry(content, font=("Segoe UI", 14, "bold"), height=34,
-                                  fg_color=COLORS['glass_input'],
-                                  border_color=COLORS['glass_border'],
-                                  corner_radius=10, justify="center",
-                                  text_color=COLORS['text'])
+        # Device Header (Terminal Style)
+        header_frame = ctk.CTkFrame(content, fg_color="transparent")
+        header_frame.pack(fill="x")
+        
+        id_tag = ctk.CTkLabel(header_frame, text=f"NODE:0{sid}" if sid < 10 else f"NODE:{sid}", 
+                              font=("Consolas", 11, "bold"), text_color=COLORS['text_dim'])
+        id_tag.pack(side="left")
+
+        # Online Status Indicator (LED)
+        status_led = ctk.CTkLabel(header_frame, text="[ONLINE]", font=("Consolas", 9, "bold"), text_color=COLORS['dim_icon'])
+        status_led.pack(side="right")
+
+        # Name Entry (Terminal Prompt Style)
+        name_frame = ctk.CTkFrame(content, fg_color="transparent")
+        name_frame.pack(fill="x", pady=(5, 0))
+        ctk.CTkLabel(name_frame, text=">", font=("Consolas", 12, "bold"), text_color=COLORS['text']).pack(side="left")
+        
+        name_entry = ctk.CTkEntry(name_frame, font=("Consolas", 12, "bold"), height=25,
+                                  fg_color="transparent", border_width=0,
+                                  text_color=COLORS['text_white'])
         name_entry.insert(0, name)
-        name_entry.pack(fill="x", pady=(0, 6))
+        name_entry.pack(side="left", fill="x", expand=True, padx=5)
         name_entry.bind("<FocusOut>", lambda e, s=sid, ent=name_entry: self._update_device_name(s, ent.get()))
         name_entry.bind("<Return>", lambda e, s=sid, ent=name_entry: (self._update_device_name(s, ent.get()), self.focus()))
 
-        # LED (Gizli)
-        status_led = ctk.CTkLabel(content, text="", font=("Arial", 1), width=0, height=0)
-        
-        # İkon Alanı
-        icon_frame = ctk.CTkFrame(content, fg_color="transparent", height=40)
-        icon_frame.pack(pady=5)
-        
-        icon_err = ctk.CTkLabel(icon_frame, text="▲", font=("Arial", 24), text_color=COLORS['bg_card'])
-        tooltip_err = CTkToolTip(icon_err, "Hata Yok")
+        # Separator (Green Line)
+        ctk.CTkFrame(content, height=1, fg_color=COLORS['border']).pack(fill="x", pady=8)
 
-        icon_warn = ctk.CTkLabel(icon_frame, text="▲", font=("Arial", 24), text_color=COLORS['bg_card'])
-        tooltip_warn = CTkToolTip(icon_warn, "Uyarı Yok")
-        
-        # Durum Yazısı
-        lbl_status = ctk.CTkLabel(content, text="Bekleniyor...", 
-                                  font=("Segoe UI", 16, "bold"),
-                                  text_color=COLORS['text_dim'])
-        lbl_status.pack(pady=(5, 5))
+        # --- DOOR STATUS (KAPI DURUMU) ---
+        status_box = ctk.CTkFrame(content, fg_color="transparent")
+        status_box.pack(fill="x")
 
-        # Butonlar
+        ctk.CTkLabel(status_box, text="KAPI DURUMU:", font=("Consolas", 10, "bold"), 
+                     text_color=COLORS['text_dim']).pack(side="left")
+        
+        lbl_status = ctk.CTkLabel(status_box, text="[ .... ]", 
+                                  font=("Consolas", 13, "bold"),
+                                  text_color=COLORS['text'])
+        lbl_status.pack(side="left", padx=10)
+
+        # --- CONTROLS ---
         btn_frame = ctk.CTkFrame(content, fg_color="transparent")
-        btn_frame.pack(fill="x", pady=(6, 6))
+        btn_frame.pack(fill="x", pady=(15, 5))
         btn_frame.columnconfigure(0, weight=1)
         btn_frame.columnconfigure(1, weight=1)
 
-        btn_on = ctk.CTkButton(btn_frame, text="AÇ",
-                      font=("Segoe UI", 11, "bold"), height=34,
-                      fg_color=COLORS['green_dark'], hover_color=COLORS['green'],
-                      corner_radius=12,
+        btn_on = ctk.CTkButton(btn_frame, text="[ AÇ ]",
+                      font=("Consolas", 11, "bold"), height=28,
+                      fg_color="transparent", hover_color=COLORS['matrix_dark'],
+                      border_width=1, border_color=COLORS['border'],
+                      corner_radius=0,
                       command=lambda s=sid: self._send_command(s, 1)
                       )
-        btn_on.grid(row=0, column=0, padx=(0, 3), sticky="ew")
+        btn_on.grid(row=0, column=0, padx=(0, 2), sticky="ew")
 
-        btn_off = ctk.CTkButton(btn_frame, text="KAPAT",
-                      font=("Segoe UI", 11, "bold"), height=34,
-                      fg_color=COLORS['red_dark'], hover_color=COLORS['red'],
-                      corner_radius=12,
+        btn_off = ctk.CTkButton(btn_frame, text="[ KAPAT ]",
+                      font=("Consolas", 11, "bold"), height=28,
+                      fg_color="transparent", hover_color=COLORS['matrix_dark'],
+                      border_width=1, border_color=COLORS['border'],
+                      corner_radius=0,
                       command=lambda s=sid: self._send_command(s, 2)
                       )
-        btn_off.grid(row=0, column=1, padx=(3, 0), sticky="ew")
+        btn_off.grid(row=0, column=1, padx=(2, 0), sticky="ew")
 
-        # Detaylar Button
-        ctk.CTkButton(content, text="⚙  Ayarlar",
-                      font=("Segoe UI", 10), height=28,
-                      fg_color=COLORS['glass_surface'],
-                      hover_color=COLORS['bg_card_hover'],
-                      corner_radius=10, border_width=1,
-                      border_color=COLORS['glass_border'],
-                      command=lambda s=sid: self._open_detail_popup(s)
-                      ).pack(fill="x", pady=(2, 0))
+        # Footer (Stats & Settings)
+        footer = ctk.CTkFrame(content, fg_color="transparent")
+        footer.pack(fill="x", pady=(10, 0))
 
-        card.bind("<Button-1>", lambda e, s=sid: self._select_device(s))
+        icon_err = ctk.CTkLabel(footer, text="[ERR]", font=("Consolas", 9, "bold"), text_color=COLORS['bg_dark'])
+        icon_warn = ctk.CTkLabel(footer, text="[WRN]", font=("Consolas", 9, "bold"), text_color=COLORS['bg_dark'])
+        
+        btn_set = ctk.CTkLabel(footer, text="[SETTINGS]", font=("Consolas", 9), text_color=COLORS['text_dim'], cursor="hand2")
+        btn_set.pack(side="right")
+        btn_set.bind("<Button-1>", lambda e, s=sid: self._open_detail_popup(s))
 
-        self.device_cards_ui[sid] = {
-            'frame': card, 'icon_err': icon_err, 'tooltip_err': tooltip_err,
-            'icon_warn': icon_warn, 'tooltip_warn': tooltip_warn,
-            'name_entry': name_entry, 'led': status_led,
-            'btn_on': btn_on, 'btn_off': btn_off, 'lbl_status': lbl_status
-        }
+        # --- MATRIX HOVER ---
+        def on_enter(e):
+            card.configure(border_color=COLORS['border_glow'], border_width=2)
+            id_tag.configure(text_color=COLORS['text'])
+        
+        def on_leave(e):
+            card.configure(border_color=COLORS['border'], border_width=1)
+            id_tag.configure(text_color=COLORS['text_dim'])
+
+        card.bind("<Enter>", on_enter)
+        card.bind("<Leave>", on_leave)
         
         # Hitbox Fix
         def bind_recursive(w, s):
-            if isinstance(w, ctk.CTkButton): return
+            if isinstance(w, (ctk.CTkButton, ctk.CTkEntry)): return
             try:
                 w.bind("<Button-1>", lambda e, sid=s: self._select_device(sid))
+                w.bind("<Enter>", on_enter)
+                w.bind("<Leave>", on_leave)
             except: pass
             for child in w.winfo_children():
                 bind_recursive(child, s)
         
         bind_recursive(card, sid)
+
+        self.device_cards_ui[sid] = {
+            'frame': card, 'icon_err': icon_err, 'icon_warn': icon_warn,
+            'name_entry': name_entry, 'led': status_led,
+            'btn_on': btn_on, 'btn_off': btn_off, 'lbl_status': lbl_status,
+            'id_tag': id_tag
+        }
 
     def _update_ui_data(self):
         with self.poll_lock:
@@ -384,73 +419,42 @@ class HMIApp(ctk.CTk):
                     cache = data['cache']
                     status = cache.get(REG_STATUS, 0)
                     
-                    border = COLORS['glass_glow'] if sid == self.selected_device_id else COLORS['glass_border']
-                    if ui['frame'].cget("border_color") != border:
-                        ui['frame'].configure(border_color=border)
-                    
-                    status_text = STATUS_TEXT.get(status, "Bilinmiyor")
-                    ui['lbl_status'].configure(text=status_text, text_color=COLORS['text'])
-                    
-                    if not online:
-                        if ui['frame'].cget("fg_color") != COLORS['bg_card_closed']:
-                            ui['frame'].configure(fg_color=COLORS['bg_card_closed'])
+                    # Highlight selection
+                    if sid == self.selected_device_id:
+                        ui['frame'].configure(border_color=COLORS['border_glow'], border_width=2)
                     else:
-                        if ui['frame'].cget("fg_color") != COLORS['bg_card']:
-                            ui['frame'].configure(fg_color=COLORS['bg_card'])
-
-                    ui['btn_on'].configure(fg_color=COLORS['green_dark'])
-                    ui['btn_off'].configure(fg_color=COLORS['red_dark'])
-
+                        ui['frame'].configure(border_color=COLORS['border'], border_width=1)
+                    
+                    # Status Display
+                    status_text = STATUS_TEXT.get(status, "[UNK]")
+                    ui['lbl_status'].configure(text=status_text)
+                    
+                    # Connection status (Card LED)
                     last_ts = data.get('timestamp', 0)
-                    if time.time() - last_ts > 15.0 and self.polling:
-                        online = False
-                        is_stale = True
-                    else:
-                        is_stale = False
-
-                    if not online: led_color = COLORS['red']
-                    elif is_stale: led_color = COLORS['yellow']
-                    else: led_color = COLORS['green']
+                    is_stale = (time.time() - last_ts > 15.0 and self.polling)
                     
-                    if ui['led'].cget("text_color") != led_color:
-                        ui['led'].configure(text_color=led_color)
+                    if not online: 
+                        ui['led'].configure(text="[OFFLINE]", text_color=COLORS['red'])
+                    elif is_stale: 
+                        ui['led'].configure(text="[LAGGING]", text_color=COLORS['yellow'])
+                    else: 
+                        ui['led'].configure(text="[ONLINE]", text_color=COLORS['matrix_green'])
 
+                    # Errors & Warnings
                     err_val = cache.get(REG_ERRORS, 0)
                     warn_val = cache.get(REG_WARNINGS, 0)
                     
-                    active_errors = []
                     if err_val > 0:
-                        for bit, msg in ERR_CODES.items():
-                            if (err_val >> bit) & 1:
-                                active_errors.append(f"• {msg}")
-                        if not active_errors: active_errors.append(f"• Kod: {err_val}")
-
-                    active_warnings = []
-                    if warn_val > 0:
-                        for bit, msg in WARN_CODES.items():
-                            if (warn_val >> bit) & 1:
-                                active_warnings.append(f"• {msg}")
-                        if not active_warnings: active_warnings.append(f"• Kod: {warn_val}")
-                    
-                    if active_errors:
-                        if not ui['icon_err'].winfo_ismapped(): ui['icon_err'].pack(side="left", padx=10)
-                        ui['icon_err'].configure(text_color=COLORS['red']) 
-                        ui['tooltip_err'].label.configure(text="\n".join(active_errors))
+                        ui['icon_err'].pack(side="left")
+                        ui['icon_err'].configure(text_color=COLORS['red'])
                     else:
                         ui['icon_err'].pack_forget()
-                        ui['tooltip_err'].label.configure(text="")
 
-                    if online and active_warnings:
-                        if not ui['icon_warn'].winfo_ismapped(): ui['icon_warn'].pack(side="right", padx=10)
-                        ui['icon_warn'].configure(text_color=COLORS['yellow']) 
-                        ui['tooltip_warn'].label.configure(text="\n".join(active_warnings))
-                    elif online and is_stale:
-                        if not ui['icon_warn'].winfo_ismapped(): ui['icon_warn'].pack(side="right", padx=10)
+                    if online and warn_val > 0:
+                        ui['icon_warn'].pack(side="left", padx=5)
                         ui['icon_warn'].configure(text_color=COLORS['yellow'])
-                        ui['tooltip_warn'].label.configure(text="VERİ GECİKMESİ")
                     else:
                         ui['icon_warn'].pack_forget()
-                        ui['tooltip_warn'].label.configure(text="")
                     
                 except Exception as e:
                     print(f"UI Update Error (SID {sid}): {e}") 
@@ -460,44 +464,52 @@ class HMIApp(ctk.CTk):
     # ========================================================================
     def _open_add_device_dialog(self):
         dialog = ctk.CTkToplevel(self)
-        dialog.title("Cihaz Ekle")
-        dialog.geometry("380x380")
-        dialog.configure(fg_color=COLORS['bg_mid'])
+        dialog.title("SYSTEM: ADD NODE")
+        dialog.geometry("380x420")
+        dialog.configure(fg_color=COLORS['bg_dark'])
         dialog.transient(self)
         dialog.grab_set()
 
-        ctk.CTkLabel(dialog, text="Yeni Cihaz Ekle", font=("Segoe UI", 16, "bold"), text_color=COLORS['text']).pack(pady=(24, 16))
-        ctk.CTkLabel(dialog, text="SLAVE ID", font=("Segoe UI", 9, "bold"), text_color=COLORS['text_dim']).pack()
-        ent_id = ctk.CTkEntry(dialog, width=120, height=34, corner_radius=10, fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'], font=("Consolas", 13), justify="center")
-        ent_id.pack(pady=(4, 10))
+        # Header
+        ctk.CTkLabel(dialog, text="☢", font=("Consolas", 32), text_color=COLORS['accent']).pack(pady=(25, 0))
+        ctk.CTkLabel(dialog, text="INITIALIZE NEW NODE", font=("Consolas", 14, "bold"), text_color=COLORS['text']).pack(pady=(0, 20))
+
+        # Inputs
+        ctk.CTkLabel(dialog, text=":: SLAVE ID ::", font=("Consolas", 9, "bold"), text_color=COLORS['text_dim']).pack()
+        ent_id = ctk.CTkEntry(dialog, width=140, height=36, corner_radius=0, 
+                              fg_color=COLORS['bg_dark'], border_color=COLORS['border'], 
+                              font=("Consolas", 14), justify="center")
+        ent_id.pack(pady=(4, 15))
         ent_id.insert(0, "1")
 
-        ctk.CTkLabel(dialog, text="CİHAZ ADI", font=("Segoe UI", 9, "bold"), text_color=COLORS['text_dim']).pack()
-        ent_name = ctk.CTkEntry(dialog, width=220, height=34, corner_radius=10, fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'], font=("Segoe UI", 12), justify="center")
-        ent_name.pack(pady=(4, 16))
-        ent_name.insert(0, "Yeni Cihaz")
+        ctk.CTkLabel(dialog, text=":: DEVICE LABEL ::", font=("Consolas", 9, "bold"), text_color=COLORS['text_dim']).pack()
+        ent_name = ctk.CTkEntry(dialog, width=240, height=36, corner_radius=0, 
+                                fg_color=COLORS['bg_dark'], border_color=COLORS['border'], 
+                                font=("Consolas", 12), justify="center")
+        ent_name.pack(pady=(4, 20))
+        ent_name.insert(0, "NODE_NEW")
 
-        lbl_err = ctk.CTkLabel(dialog, text="", font=("Segoe UI", 11), text_color=COLORS['red'])
+        lbl_err = ctk.CTkLabel(dialog, text="", font=("Consolas", 10))
         lbl_err.pack(pady=2)
 
         def add():
             try:
                 sid_str = ent_id.get().strip()
                 if not sid_str:
-                    lbl_err.configure(text="ID boş olamaz!")
+                    lbl_err.configure(text="! ID_NULL", text_color=COLORS['red'])
                     return
                 try: sid = int(sid_str)
                 except ValueError: 
-                    lbl_err.configure(text="ID sayı olmalı!")
+                    lbl_err.configure(text="! ID_TYPE_ERROR", text_color=COLORS['red'])
                     return
 
                 if any(d['id'] == sid for d in self.devices):
-                    lbl_err.configure(text=f"ID {sid} zaten mevcut!")
+                    lbl_err.configure(text=f"! NODE_{sid}_EXISTS", text_color=COLORS['red'])
                     return
                 
                 name = ent_name.get().strip()
                 if not name:
-                    lbl_err.configure(text="İsim boş olamaz!")
+                    lbl_err.configure(text="! NAME_NULL", text_color=COLORS['red'])
                     return
 
                 self.devices.append({'id': sid, 'name': name})
@@ -508,18 +520,21 @@ class HMIApp(ctk.CTk):
                     'slave_resp_time': 0, 'loop_time': 0, 'last_poll_ts': 0,
                     'slave_resp_history': [], 'loop_time_history': []
                 }
-                
-                try: self._save_config()
-                except Exception as e: lbl_err.configure(text=f"Kayıt Hatası: {e}")
-                
-                self._sync_grid_layout()
+                self._save_config()
+                self._update_grid_area()
                 dialog.destroy()
             except Exception as e:
-                lbl_err.configure(text=f"Beklenmeyen Hata: {e}")
+                lbl_err.configure(text=f"! FATAL: {e}", text_color=COLORS['red'])
 
-        ctk.CTkButton(dialog, text="EKLE", height=36, corner_radius=12,
-                      font=("Segoe UI", 12, "bold"), fg_color=COLORS['accent'], hover_color=COLORS['accent_dark'],
-                      command=add).pack(pady=6, padx=60, fill="x")
+        ctk.CTkButton(dialog, text="[ EXEC ADD ]", font=("Consolas", 12, "bold"),
+                      height=40, corner_radius=0, fg_color="transparent",
+                      border_width=1, border_color=COLORS['border'],
+                      hover_color=COLORS['matrix_dark'], command=add).pack(pady=10, padx=40, fill="x")
+        
+        ctk.CTkButton(dialog, text="[ ABORT ]", font=("Consolas", 11),
+                      height=32, corner_radius=0, fg_color="transparent",
+                      hover_color="#3D0000", border_width=0,
+                      command=dialog.destroy).pack(padx=40, fill="x")
 
     def _delete_selected_device(self):
         if self.selected_device_id:
@@ -556,8 +571,8 @@ class HMIApp(ctk.CTk):
                 try: self.instrument.serial.close()
                 except: pass
             self.instrument = None
-            self.btn_connect.configure(text="⚡ Bağlan", fg_color=COLORS['green_dark'])
-            self.lbl_toolbar_status.configure(text="● Bağlı değil", text_color=COLORS['text_dim'])
+            self.btn_connect.configure(text="[ EXEC CONNECT ]", fg_color="transparent", border_color=COLORS['matrix_green'])
+            self.lbl_toolbar_status.configure(text=":: OFFLINE ::", text_color=COLORS['text_dim'])
         else:
             if not self.devices:
                 self.lbl_toolbar_status.configure(text="Önce cihaz ekleyin!", text_color=COLORS['red'])
@@ -578,11 +593,11 @@ class HMIApp(ctk.CTk):
                     self.data_store[sid]['online'] = True
                     self.data_store[sid]['errors'] = 0
 
-                self.btn_connect.configure(text="⏹  Durdur", fg_color=COLORS['red_dark'])
-                self.lbl_toolbar_status.configure(text=f"● Bağlı: {port} @ {baud}", text_color=COLORS['green'])
+                self.btn_connect.configure(text="[ TERMINATE ]", fg_color="transparent", border_color=COLORS['red'])
+                self.lbl_toolbar_status.configure(text=f":: ONLINE :: {port} ::", text_color=COLORS['matrix_green'])
                 threading.Thread(target=self._polling_worker, daemon=True).start()
             except Exception as e:
-                self.lbl_toolbar_status.configure(text=f"✕ Hata: {e}", text_color=COLORS['red'])
+                self.lbl_toolbar_status.configure(text=f"!! ERR_INIT: {e}", text_color=COLORS['red'])
 
     def _polling_worker(self):
         """Polling döngüsü: Öncelikli komut kuyruğu ve periyodik sorgu."""
@@ -758,15 +773,18 @@ class HMIApp(ctk.CTk):
     # ========================================================================
     #  DETAY POPUP
     # ========================================================================
+    # ========================================================================
+    #  SETTINGS POPUP (SEXY REDESIGN)
+    # ========================================================================
     def _open_detail_popup(self, slave_id):
         device = next((d for d in self.devices if d['id'] == slave_id), None)
         if not device: return
 
         self.detail_open_for = slave_id
         popup = ctk.CTkToplevel(self)
-        popup.title(f"Detaylar — {device['name']}")
-        popup.geometry("480x620")
-        popup.configure(fg_color=COLORS['bg_mid'])
+        popup.title(f"SYSTEM: NODE_MGMT [{slave_id}]")
+        popup.geometry("460x640")
+        popup.configure(fg_color=COLORS['bg_dark'])
         popup.transient(self)
         popup.grab_set()
 
@@ -776,56 +794,66 @@ class HMIApp(ctk.CTk):
 
         popup.protocol("WM_DELETE_WINDOW", on_close)
 
-        ctk.CTkLabel(popup, text=f"⚙  {device['name']}", font=("Segoe UI", 18, "bold"), text_color=COLORS['text']).pack(pady=(20, 2))
-        ctk.CTkLabel(popup, text=f"Slave ID: {slave_id}", font=("Consolas", 10), text_color=COLORS['text_dim']).pack(pady=(0, 12))
-        ctk.CTkFrame(popup, height=1, fg_color=COLORS['glass_border']).pack(fill="x", padx=30, pady=(0, 12))
+        # Header Section
+        header = ctk.CTkFrame(popup, fg_color="transparent")
+        header.pack(fill="x", pady=(25, 10))
+        
+        ctk.CTkLabel(header, text="☢", font=("Consolas", 32), text_color=COLORS['accent']).pack()
+        ctk.CTkLabel(header, text=device['name'].upper(), font=("Consolas", 18, "bold"), text_color=COLORS['text']).pack()
+        ctk.CTkLabel(header, text=f"INTERFACE_ID: {slave_id:02d}", font=("Consolas", 10), text_color=COLORS['text_dim']).pack()
+
+        # Separator
+        ctk.CTkFrame(popup, height=1, fg_color=COLORS['border']).pack(fill="x", padx=40, pady=10)
+
+        # Parameters Area
+        scroll_area = ctk.CTkScrollableFrame(popup, fg_color="transparent", height=320, corner_radius=0)
+        scroll_area.pack(fill="both", expand=True, padx=25)
 
         entries = []
         value_labels = []
         for p in PARAM_DEFS:
-            row = ctk.CTkFrame(popup, fg_color=COLORS['bg_card'], corner_radius=10, height=40)
-            row.pack(fill="x", padx=28, pady=3)
-            row.pack_propagate(False)
-
+            row = ctk.CTkFrame(scroll_area, fg_color=COLORS['bg_dark'], corner_radius=0, border_width=1, border_color=COLORS['border'])
+            row.pack(fill="x", pady=2)
+            
             inner = ctk.CTkFrame(row, fg_color="transparent")
-            inner.pack(fill="both", expand=True, padx=12, pady=4)
+            inner.pack(fill="both", expand=True, padx=15, pady=8)
 
-            ctk.CTkLabel(inner, text=p['label'], width=130, anchor="w", font=("Segoe UI", 11), text_color=COLORS['text_label']).pack(side="left")
-            lbl_val = ctk.CTkLabel(inner, text="---", width=55, text_color=COLORS['accent_glow'], font=("Consolas", 13, "bold"))
-            lbl_val.pack(side="left")
-            value_labels.append((p, lbl_val))
-
-            e = ctk.CTkEntry(inner, width=90, height=28, corner_radius=8, fg_color=COLORS['glass_input'], border_color=COLORS['glass_border'], font=("Consolas", 11), justify="center")
+            ctk.CTkLabel(inner, text=f"> {p['label']}", anchor="w", font=("Consolas", 11, "bold"), text_color=COLORS['text']).pack(side="left")
+            
+            e = ctk.CTkEntry(inner, width=80, height=28, corner_radius=0, 
+                              fg_color=COLORS['bg_dark'], border_color=COLORS['border'], 
+                              font=("Consolas", 12), justify="center")
             e.pack(side="right")
+            
+            lbl_val = ctk.CTkLabel(inner, text="---", width=40, text_color=COLORS['matrix_green'], font=("Consolas", 13, "bold"))
+            lbl_val.pack(side="right", padx=10)
+            
+            value_labels.append((p, lbl_val))
             entries.append((p, e))
 
-        lbl_err = ctk.CTkLabel(popup, text="", font=("Segoe UI", 10))
-        lbl_err.pack(pady=6)
+        # Bottom Panel
+        bottom = ctk.CTkFrame(popup, fg_color=COLORS['bg_dark'], corner_radius=0, border_width=1, border_color=COLORS['border'])
+        bottom.pack(fill="x", pady=(10, 0))
 
-        # İstatistikler
-        stats_frame = ctk.CTkFrame(popup, fg_color="transparent")
-        stats_frame.pack(fill="x", padx=30, pady=5)
+        # Stats Overlay
+        stats_box = ctk.CTkFrame(bottom, fg_color="transparent")
+        stats_box.pack(fill="x", padx=40, pady=15)
         
-        # Sol ve Sağ Sütun
-        col1 = ctk.CTkFrame(stats_frame, fg_color="transparent")
-        col1.pack(side="left", fill="y")
-        col2 = ctk.CTkFrame(stats_frame, fg_color="transparent")
-        col2.pack(side="right", fill="y")
+        def create_stat(parent, label, key, side="left"):
+            f = ctk.CTkFrame(parent, fg_color="transparent")
+            f.pack(side=side, fill="both", expand=True)
+            ctk.CTkLabel(f, text=label, font=("Consolas", 8, "bold"), text_color=COLORS['text_dim']).pack()
+            l_val = ctk.CTkLabel(f, text="-- ms", font=("Consolas", 11, "bold"), text_color=COLORS['text'])
+            l_val.pack()
+            l_avg = ctk.CTkLabel(f, text="(Avg: --)", font=("Consolas", 9), text_color=COLORS['text_dim'])
+            l_avg.pack()
+            return l_val, l_avg
 
-        lbl_ping = ctk.CTkLabel(col1, text="Ping: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="w")
-        lbl_ping.pack(fill="x")
-        lbl_cmd = ctk.CTkLabel(col1, text="Cmd Lat: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="w")
-        lbl_cmd.pack(fill="x")
-        
-        lbl_slave = ctk.CTkLabel(col2, text="Slave Resp: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="e")
-        lbl_slave.pack(fill="x")
-        lbl_slave_avg = ctk.CTkLabel(col2, text="Avg: -- ms", font=("Consolas", 9), text_color=COLORS['text_dim'], anchor="e")
-        lbl_slave_avg.pack(fill="x")
+        lbl_ping, _ = create_stat(stats_box, ":: PING ::", 'latency')
+        lbl_slave, lbl_slave_avg = create_stat(stats_box, ":: SLAVE_RESP ::", 'slave_resp_time', "right")
 
-        lbl_loop = ctk.CTkLabel(col2, text="Loop Time: -- ms", font=("Consolas", 10), text_color=COLORS['text_dim'], anchor="e")
-        lbl_loop.pack(fill="x")
-        lbl_loop_avg = ctk.CTkLabel(col2, text="Avg: -- ms", font=("Consolas", 9), text_color=COLORS['text_dim'], anchor="e")
-        lbl_loop_avg.pack(fill="x")
+        lbl_err = ctk.CTkLabel(bottom, text="", font=("Consolas", 10))
+        lbl_err.pack(pady=5)
 
         def refresh_values():
             if self.detail_open_for != slave_id: return
@@ -837,27 +865,18 @@ class HMIApp(ctk.CTk):
                 cur = raw - 10 if p.get('offset') else raw
                 lbl.configure(text=str(cur))
             
-            lbl_ping.configure(text=f"Ping: {d.get('latency',0):.0f} ms")
-            lbl_cmd.configure(text=f"Cmd Lat: {d.get('cmd_latency',0):.0f} ms")
-            lbl_slave.configure(text=f"Slave Resp: {d.get('slave_resp_time',0):.0f} ms")
+            lbl_ping.configure(text=f"{d.get('latency',0):.0f} ms")
+            lbl_slave.configure(text=f"{d.get('slave_resp_time',0):.0f} ms")
             
-            # Avg calc
             hist_s = d.get('slave_resp_history', [])
             avg_s = sum(hist_s)/len(hist_s) if hist_s else 0
-            lbl_slave_avg.configure(text=f"(Avg: {avg_s:.0f} ms)")
-
-            lbl_loop.configure(text=f"Loop Time: {d.get('loop_time',0):.0f} ms")
+            lbl_slave_avg.configure(text=f"(Avg: {avg_s:.0f})")
             
-            hist_l = d.get('loop_time_history', [])
-            avg_l = sum(hist_l)/len(hist_l) if hist_l else 0
-            lbl_loop_avg.configure(text=f"(Avg: {avg_l:.0f} ms)")
-            
-            popup.after(250, refresh_values)
+            popup.after(500, refresh_values)
 
         refresh_values()
 
         def apply():
-            writes = {}
             errors = []
             for p, e in entries:
                 val_str = e.get().strip()
@@ -865,23 +884,30 @@ class HMIApp(ctk.CTk):
                 try:
                     val = int(val_str)
                     if val < p['min'] or val > p['max']:
-                        errors.append(f"{p['label']}: Aralık {p['min']}-{p['max']}")
+                        errors.append(f"{p['label']}_RANGE_ERR")
                         continue
-                    # Kuyruğa at 
                     self._send_command_settings(slave_id, p['reg'], val + 10 if p.get('offset') else val)
-                except ValueError: errors.append(f"{p['label']}: Sayı girin")
+                except ValueError: errors.append(f"{p['label']}_TYPE_ERR")
             
-            if errors: lbl_err.configure(text="\n".join(errors), text_color=COLORS['red'])
+            if errors: lbl_err.configure(text=" | ".join(errors), text_color=COLORS['red'])
             else: 
-                lbl_err.configure(text="✓ Kuyruğa alındı", text_color=COLORS['green'])
+                lbl_err.configure(text=":: SET_QUEUE_CONFIRMED ::", text_color=COLORS['accent'])
                 for _, e in entries: e.delete(0, 'end')
 
-        ctk.CTkFrame(popup, height=1, fg_color=COLORS['glass_border']).pack(fill="x", padx=30, pady=(6, 0))
-        ctk.CTkButton(popup, text="UYGULA", font=("Segoe UI", 12, "bold"), height=38, corner_radius=12,
-                      fg_color=COLORS['green_dark'], hover_color=COLORS['green'], command=apply).pack(pady=(14, 6), padx=28, fill="x")
-        ctk.CTkButton(popup, text="KAPAT", font=("Segoe UI", 11), height=32, corner_radius=10,
-                      fg_color=COLORS['glass_surface'], hover_color=COLORS['bg_card_hover'], border_width=1, border_color=COLORS['glass_border'],
-                      command=on_close).pack(padx=28, fill="x")
+        # Action Buttons
+        btn_box = ctk.CTkFrame(bottom, fg_color="transparent")
+        btn_box.pack(fill="x", padx=35, pady=(5, 25))
+
+        btn_apply = ctk.CTkButton(btn_box, text="[ EXEC APPLY ]", font=("Consolas", 12, "bold"), 
+                                  height=40, corner_radius=0, fg_color="transparent",
+                                  border_width=1, border_color=COLORS['accent'],
+                                  hover_color=COLORS['matrix_dark'], command=apply)
+        btn_apply.pack(fill="x", pady=5)
+
+        btn_close = ctk.CTkButton(btn_box, text="[ TERMINATE WINDOW ]", font=("Consolas", 11), 
+                                  height=32, corner_radius=0, fg_color="transparent",
+                                  hover_color="#3D0000", command=on_close)
+        btn_close.pack(fill="x")
 
     def _send_command_settings(self, sid, reg, val):
         """Ayar değişikliği için genel komut gönderici (aynı kuyruğu kullanır)."""
